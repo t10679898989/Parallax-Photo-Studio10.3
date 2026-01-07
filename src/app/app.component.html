@@ -1,0 +1,19 @@
+
+<main class="h-screen w-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
+  @if (photoService.activePhotoId()) {
+    @let activePhoto = photoService.getActivePhoto();
+    @if (activePhoto) {
+      <app-editor 
+        [photo]="activePhoto"
+        (goBack)="photoService.clearSelection()"
+        (updateCaption)="onCaptionUpdated($event)"
+      ></app-editor>
+    }
+  } @else {
+    <app-gallery 
+      [photos]="photoService.photos()"
+      (selectPhoto)="photoService.selectPhoto($event)"
+      (importFiles)="photoService.addPhotos($event)"
+    ></app-gallery>
+  }
+</main>

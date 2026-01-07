@@ -1,0 +1,5 @@
+{
+  "name": "Cof CopyParallax Photo Studio10.3",
+  "description": "這是一個非常精準的需求。您希望在引入「陀螺儀動態效 果(Motion)」時,依然嚴格遵守「不露出黑邊」的原則。\n\n目前的實作只在「手動拖曳(onDrag)」時計算並限制了位 移,但陀螺儀的數值(gyrox/Y)是在渲染時直接疊加的, 這導致疊加後的總位移可能超出邊界。",
+  "requestFramePermissions": []
+}
