@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Parallax App</string>
+    <string name="title_activity_main">Parallax App</string>
+    <string name="package_name">com.myparallax.app</string>
+    <string name="custom_url_scheme">com.myparallax.app</string>
+</resources>
