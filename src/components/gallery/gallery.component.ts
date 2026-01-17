@@ -1171,7 +1171,22 @@ export class GalleryComponent {
       this.showWallpaperMenu.set(false);
   }
 
-  // 🔥 2. 修正後的 applyPlaylistWallpaper 方法 (解決黑畫面問題)
+  // 🔥 2. 輔助函式：將 Blob 轉為 Base64 字串
+  private blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        // 移除 "data:image/jpeg;base64," 前綴，只保留純 Base64
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // 🔥 3. 修正後的 applyPlaylistWallpaper 方法 (解決黑畫面與路徑錯誤)
   async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       
@@ -1204,17 +1219,30 @@ export class GalleryComponent {
              throw new Error('找不到封面照片');
           }
 
+          // C. 準備圖片資料 (支援 Path 或 URL)
+          let base64Data: string;
+          // 嘗試取得路徑 (使用 as any 避開 TS 檢查)
           const sourcePath = (firstPhoto as any).path || (firstPhoto as any).webPath;
 
-          // 1. 搬移圖片到私有資料夾
-          const file = await Filesystem.readFile({
-            path: sourcePath
-          });
+          if (sourcePath) {
+             // 情況 A: 有實體路徑
+             console.log('使用實體路徑讀取封面:', sourcePath);
+             const file = await Filesystem.readFile({ path: sourcePath });
+             base64Data = file.data as string;
+          } else if (firstPhoto.url) {
+             // 情況 B: 只有 URL (例如網頁匯入)
+             console.log('使用 URL 下載封面:', firstPhoto.url);
+             const response = await fetch(firstPhoto.url);
+             const blob = await response.blob();
+             base64Data = await this.blobToBase64(blob);
+          } else {
+             throw new Error('無法讀取照片資料');
+          }
 
-          // 使用固定檔名 current_wallpaper.jpg，這樣 Native 就會讀取這張
+          // D. 寫入檔案
           const savedFile = await Filesystem.writeFile({
             path: 'current_wallpaper.jpg', 
-            data: file.data,
+            data: base64Data,
             directory: Directory.Data,
             recursive: true
           });
@@ -1222,7 +1250,7 @@ export class GalleryComponent {
           const nativePath = savedFile.uri.replace('file://', '');
           console.log('播放清單封面已準備好:', nativePath);
 
-          // 2. 呼叫 Native Bridge (傳送路徑)
+          // E. 呼叫 Native Bridge (傳送路徑)
           if ((window as any).Android && (window as any).Android.setWallpaper) {
               (window as any).Android.setWallpaper(nativePath);
               this.showToast('已設定播放清單封面為桌布');
@@ -1232,7 +1260,7 @@ export class GalleryComponent {
 
       } catch (e) {
           console.error(e);
-          this.showToast('設定失敗');
+          this.showToast('設定失敗: ' + (e as any).message);
       }
 
       setTimeout(() => {

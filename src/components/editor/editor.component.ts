@@ -441,76 +441,89 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.showWallpaperMenu.set(false);
   }
 
-  // 🔥 2. 修正後的 applyWallpaper 方法 (加入 Filesystem 搬移圖片邏輯)
+  // 🔥 輔助函式：將 Blob 轉為 Base64 字串
+  private blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        // 移除 "data:image/jpeg;base64," 前綴，只保留純 Base64
+        const base64 = result.split(',')[1]; 
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // 🔥 修正後的 applyWallpaper (最強相容版：支援 URL 下載)
   async applyWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       
       const currentPhoto = this.photo();
-      // 嘗試取得真實路徑 (path) 或是網頁路徑 (webPath)
-      const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
-
-      if (!sourcePath) {
-        this.toastMessage.set('錯誤：找不到圖片原始路徑');
-        return;
-      }
-
       this.toastMessage.set('處理中...');
 
-      // 建立設定檔 (備份用)
-      const config = {
-          photoId: currentPhoto.id,
-          photoUrl: currentPhoto.url,
-          motionEnabled: this.motionEnabled(),
-          motionStrength: this.motionStrength(),
-          fitMode: this.fitMode(),
-          panX: this.panX(),
-          panY: this.panY(),
-          scale: this.imageScale()
-      };
-
       try {
-          // A. 儲存設定到 LocalStorage (給 Web 端下次開啟時記得)
-          const jsonString = JSON.stringify(config);
-          localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonString);
-          localStorage.setItem('LIVE_WALLPAPER_TIMESTAMP', Date.now().toString());
+          // 1. 儲存設定 (備份)
+          const config = {
+              photoId: currentPhoto.id,
+              motionEnabled: this.motionEnabled(),
+              motionStrength: this.motionStrength(),
+              scale: this.imageScale(),
+              panX: this.panX(),
+              panY: this.panY()
+          };
+          localStorage.setItem('LIVE_WALLPAPER_CONFIG', JSON.stringify(config));
 
-          // B. 【關鍵步驟】複製圖片到 App 私有資料夾
-          // 1. 讀取圖片檔案
-          const file = await Filesystem.readFile({
-            path: sourcePath
-          });
+          // 2. 準備圖片資料 (Data)
+          let base64Data: string;
+          
+          // 嘗試取得路徑 (使用 as any 避開 TS 檢查)
+          const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
 
-          // 2. 寫入到 Directory.Data (Native Service 一定讀得到這裡)
+          if (sourcePath) {
+             // 情況 A: 有實體路徑 (通常是原生相簿選的)
+             console.log('使用實體路徑讀取:', sourcePath);
+             const file = await Filesystem.readFile({ path: sourcePath });
+             base64Data = file.data as string;
+          } else if (currentPhoto.url) {
+             // 情況 B: 只有 URL (例如網頁匯入的 blob:...) -> 我們自己去抓下來！
+             console.log('找不到路徑，改為讀取 URL:', currentPhoto.url);
+             const response = await fetch(currentPhoto.url);
+             const blob = await response.blob();
+             base64Data = await this.blobToBase64(blob);
+          } else {
+             throw new Error('無法讀取照片資料 (無 Path 也無 URL)');
+          }
+
+          // 3. 寫入到 App 私有資料夾 (Directory.Data)
           const fileName = 'current_wallpaper.jpg';
           const savedFile = await Filesystem.writeFile({
             path: fileName,
-            data: file.data,
+            data: base64Data, // 這裡傳入準備好的 Base64
             directory: Directory.Data,
             recursive: true
           });
 
-          // 3. 取得乾淨的路徑字串 (移除 file:// 前綴)
+          // 4. 取得 Native 路徑並呼叫 Java
           const nativePath = savedFile.uri.replace('file://', '');
-          console.log('圖片已準備好，路徑:', nativePath);
+          console.log('圖片準備完成:', nativePath);
 
-          // C. 呼叫 Native Bridge
           if ((window as any).Android && (window as any).Android.setWallpaper) {
-              // 1. 傳送圖片路徑 (讓桌布顯示)
               (window as any).Android.setWallpaper(nativePath);
               
-              // 2. 如果 Java 端有支援 updateSettings，也把動態參數傳過去
               if ((window as any).Android.updateSettings) {
-                 (window as any).Android.updateSettings(jsonString);
+                 (window as any).Android.updateSettings(JSON.stringify(config));
               }
 
               this.toastMessage.set('已發送設定至 Android 系統');
           } else {
-             this.toastMessage.set('已儲存設定 (Bridge Inactive)');
+             this.toastMessage.set('已儲存 (Bridge Inactive)');
           }
 
       } catch (e) {
-          console.error('Failed to save wallpaper', e);
-          this.toastMessage.set('設定失敗: ' + JSON.stringify(e));
+          console.error('Failed to set wallpaper', e);
+          this.toastMessage.set('設定失敗: ' + (e as any).message);
       }
 
       setTimeout(() => {
