@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Photo, Playlist, PhotoService, SortOrder } from '../../services/photo.service';
 import { SettingsService, ThumbnailShape } from '../../services/settings.service';
 import { LazyImgDirective } from '../../directives/lazy-img.directive';
+// 🔥 1. 引入 Capacitor 檔案系統套件
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 interface DetailsState {
   visible: boolean;
@@ -35,9 +37,7 @@ interface CreatePlaylistState {
       (click)="onBackgroundClick($event)"
     >
       @if (showSettings()) {
-          <!-- Full Page Settings View -->
           <div class="h-full flex flex-col animate-fade-in bg-slate-900">
-             <!-- Settings Header -->
              <div class="flex items-center gap-4 p-4 md:p-6 border-b border-slate-800 bg-slate-900 z-10 sticky top-0">
                <button (click)="toggleSettings()" class="p-2 -ml-2 rounded-full hover:bg-slate-800 text-slate-300 transition-colors">
                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -48,7 +48,6 @@ interface CreatePlaylistState {
              <div class="flex-1 overflow-y-auto custom-scroll p-4 md:p-6">
                 <div class="max-w-2xl mx-auto w-full space-y-8 pb-20">
                   
-                  <!-- 1. Service & System Settings -->
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                     <h3 class="font-medium text-white flex items-center gap-2 mb-4">
                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -56,7 +55,6 @@ interface CreatePlaylistState {
                     </h3>
                     
                     <div class="space-y-6">
-                        <!-- Keep Alive Service -->
                         <div class="flex items-center justify-between">
                             <div>
                                 <div class="font-medium text-white">Keep Alive Service</div>
@@ -71,7 +69,6 @@ interface CreatePlaylistState {
                             </button>
                         </div>
 
-                        <!-- Pause on Power Save -->
                         <div class="flex items-center justify-between">
                             <div>
                                 <div class="font-medium text-white">Pause on Power Save</div>
@@ -86,7 +83,6 @@ interface CreatePlaylistState {
                             </button>
                         </div>
 
-                        <!-- Reduced Motion -->
                         <div class="flex items-center justify-between">
                             <div>
                                 <div class="font-medium text-white">Reduced Motion</div>
@@ -101,7 +97,6 @@ interface CreatePlaylistState {
                             </button>
                         </div>
 
-                        <!-- Double Tap to Change -->
                         <div class="flex items-center justify-between">
                             <div>
                                 <div class="font-medium text-white">Double Tap to Change</div>
@@ -118,21 +113,18 @@ interface CreatePlaylistState {
                     </div>
                   </div>
 
-                  <!-- 2. Display Settings -->
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                       <h3 class="font-medium text-white flex items-center gap-2 mb-4">
                           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                           顯示設定 (Display Settings)
                       </h3>
-                       <!-- FPS -->
-                        <div class="flex justify-between items-center mb-2">
+                       <div class="flex justify-between items-center mb-2">
                           <label class="text-sm font-medium text-slate-300">目標幀率 (Target FPS)</label>
                           <span class="text-emerald-400 font-mono text-sm">{{ settings.settings().targetFps }} FPS</span>
                         </div>
                         <input type="range" min="30" max="120" step="30" [ngModel]="settings.settings().targetFps" (ngModelChange)="updateSetting('targetFps', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                   </div>
 
-                  <!-- 3. Motion Defaults -->
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                       <div class="flex justify-between items-center mb-4">
                           <h3 class="font-medium text-white flex items-center gap-2">
@@ -176,7 +168,6 @@ interface CreatePlaylistState {
                       </div>
                   </div>
 
-                  <!-- 4. Thumbnail Appearance -->
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                      <h3 class="font-medium text-white mb-4 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
@@ -215,7 +206,6 @@ interface CreatePlaylistState {
                      </div>
                   </div>
 
-                  <!-- 5. Trash Bin -->
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                     <div class="flex justify-between items-center mb-4">
                       <h3 class="font-medium text-white flex items-center gap-2">
@@ -243,7 +233,6 @@ interface CreatePlaylistState {
                     }
                   </div>
 
-                  <!-- 6. Data Management (Backup/Restore) -->
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                      <h3 class="font-medium text-white flex items-center gap-2 mb-4">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -268,10 +257,8 @@ interface CreatePlaylistState {
               </div>
           </div>
       } @else {
-      <!-- Header -->
       <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 min-h-[44px] shrink-0 p-4 md:p-6 pb-0">
         @if (photoService.activePlaylistId()) {
-            <!-- Playlist Detail Header -->
             <div class="flex items-center gap-3 w-full">
                 <button (click)="exitPlaylist()" class="p-2 -ml-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -287,8 +274,7 @@ interface CreatePlaylistState {
                     </div>
                 </div>
                 
-                <!-- Playlist Actions -->
-                 <button 
+                <button 
                   (click)="openWallpaperMenu()" 
                   class="w-10 h-10 flex items-center justify-center bg-slate-800 border border-slate-700 rounded-full text-emerald-400 hover:bg-slate-700 hover:text-emerald-300 transition-colors shrink-0"
                   title="Set Playlist as Wallpaper"
@@ -304,7 +290,6 @@ interface CreatePlaylistState {
                 </button>
             </div>
         } @else {
-            <!-- Main Gallery Header -->
             <div>
               <h1 class="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
                 Parallax Studio
@@ -314,7 +299,6 @@ interface CreatePlaylistState {
             
             <div class="flex items-center gap-3 w-full md:w-auto">
               @if (selectedIds().length > 0) {
-                 <!-- Selection Controls -->
                  <div class="flex items-center bg-slate-800 border border-slate-600 rounded-xl overflow-hidden shadow-lg animate-fade-in divide-x divide-slate-700 w-full md:w-auto" (click)="$event.stopPropagation()">
                     
                     <div class="px-4 py-2 bg-slate-900/50 flex items-center gap-2">
@@ -332,9 +316,7 @@ interface CreatePlaylistState {
                       <span class="text-sm font-medium text-slate-200 whitespace-nowrap">全選</span>
                     </label>
 
-                    <!-- REMOVE BUTTON (Context Aware - Header) -->
                     @if (photoService.activePlaylistId()) {
-                        <!-- Playlist Mode: Remove from list -->
                         <button 
                             (click)="requestDelete($event)" 
                             class="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors flex items-center gap-2 group" 
@@ -344,7 +326,6 @@ interface CreatePlaylistState {
                             <span class="text-sm font-medium hidden sm:inline">移除</span>
                         </button>
                     } @else {
-                        <!-- Main Mode: Move to Trash -->
                         <button 
                             (click)="requestDelete($event)" 
                             class="px-4 py-2 text-red-400 hover:text-white hover:bg-red-600/80 transition-colors flex items-center gap-2 group" 
@@ -360,7 +341,6 @@ interface CreatePlaylistState {
                     </button>
                  </div>
               } @else {
-                <!-- Normal Controls (Only visible when NOT in Playlist Detail View) -->
                 @if (!photoService.activePlaylistId()) {
                     <button 
                     (click)="toggleSettings()"
@@ -384,7 +364,6 @@ interface CreatePlaylistState {
         }
       </header>
 
-      <!-- Tabs (Hidden in Playlist View) -->
       @if (!photoService.activePlaylistId()) {
         <div class="flex gap-6 border-b border-slate-700 shrink-0 mx-4 md:mx-6">
             <button 
@@ -408,17 +387,14 @@ interface CreatePlaylistState {
         </div>
       }
 
-      <!-- Main Content Area -->
       <div class="flex-1 overflow-hidden relative w-full h-full">
 
-        <!-- Selection FAB (Bottom Right) -->
         <div 
             class="fixed bottom-8 right-8 z-[80] transition-all duration-300 transform"
             [class.translate-y-32]="selectedIds().length === 0"
             [class.translate-y-0]="selectedIds().length > 0"
         >
             @if (photoService.activePlaylistId()) {
-                <!-- Playlist Mode: Remove Button replaces 3-dot menu -->
                 <button 
                     (click)="requestDelete($event)"
                     class="w-16 h-16 bg-red-600 hover:bg-red-500 text-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.5)] flex items-center justify-center transition-colors active:scale-95 border border-red-400"
@@ -427,7 +403,6 @@ interface CreatePlaylistState {
                      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                 </button>
             } @else {
-                <!-- Standard Mode: More Actions (3 dots) -->
                 <button 
                     (click)="openActionMenu($event)"
                     class="w-16 h-16 bg-slate-800 hover:bg-slate-700 text-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.5)] flex items-center justify-center transition-colors active:scale-95 border border-slate-600"
@@ -438,7 +413,6 @@ interface CreatePlaylistState {
             }
         </div>
 
-        <!-- Centered Action Menu -->
         @if (showActionMenu()) {
             <div class="absolute inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="closeActionMenu()">
                 <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-700 flex flex-col gap-2" (click)="$event.stopPropagation()">
@@ -447,7 +421,6 @@ interface CreatePlaylistState {
                         <span class="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded">{{ selectedIds().length }} 個項目</span>
                     </div>
 
-                    <!-- Add to Playlist -->
                     <div class="relative">
                         <label class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">加入播放清單</label>
                         <div class="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scroll">
@@ -476,7 +449,6 @@ interface CreatePlaylistState {
 
                     <div class="h-px bg-slate-700 my-2"></div>
 
-                    <!-- Other Actions -->
                     @if (selectedIds().length === 1) {
                         <button 
                             (click)="showDetails()"
@@ -490,7 +462,6 @@ interface CreatePlaylistState {
             </div>
         }
 
-        <!-- Delete / Remove Confirmations (Items/Photos) -->
         @if (showDeleteConfirm()) {
            <div class="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelDelete()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-700" (click)="$event.stopPropagation()">
@@ -514,7 +485,6 @@ interface CreatePlaylistState {
            </div>
         }
 
-        <!-- Create Playlist Modal -->
         @if (createPlaylistState().visible) {
            <div class="absolute inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelCreatePlaylist()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-blue-500/30" (click)="$event.stopPropagation()">
@@ -541,7 +511,6 @@ interface CreatePlaylistState {
            </div>
         }
 
-        <!-- Delete Playlist Confirmation Modal -->
         @if (deletePlaylistConfirmVisible()) {
            <div class="absolute inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelDeletePlaylist()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-red-500/30" (click)="$event.stopPropagation()">
@@ -568,7 +537,6 @@ interface CreatePlaylistState {
            </div>
         }
         
-        <!-- Wallpaper Menu (Set Playlist As Dialog) -->
         @if (showWallpaperMenu()) {
             <div class="absolute inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in" (click)="closeWallpaperMenu()">
                 <div class="bg-slate-800 rounded-t-2xl sm:rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-700" (click)="$event.stopPropagation()">
@@ -595,7 +563,6 @@ interface CreatePlaylistState {
             </div>
         }
 
-        <!-- Playlist Settings Modal -->
         @if (playlistSettingsState().visible) {
            <div class="absolute inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" (click)="closePlaylistSettings()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-700 space-y-6" (click)="$event.stopPropagation()">
@@ -604,13 +571,11 @@ interface CreatePlaylistState {
                     <button (click)="closePlaylistSettings()" class="text-slate-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                  </div>
 
-                 <!-- Rename -->
                  <div class="space-y-2">
                     <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">名稱</label>
                     <input type="text" [(ngModel)]="tempPlaylistName" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-emerald-500 outline-none">
                  </div>
 
-                 <!-- Interval -->
                  <div class="space-y-2">
                     <div class="flex justify-between">
                         <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">桌布切換間隔</label>
@@ -623,7 +588,6 @@ interface CreatePlaylistState {
                     </div>
                  </div>
 
-                 <!-- Sort Order Dropdown -->
                  <div class="space-y-2">
                     <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">排序方式</label>
                     <div class="relative">
@@ -649,9 +613,7 @@ interface CreatePlaylistState {
            </div>
         }
 
-        <!-- Tab Content Logic -->
         @if (activeTab() === 'photos' || photoService.activePlaylistId()) {
-          <!-- GRID VIEW (Used for both All Photos AND Playlist Detail) -->
           @let currentPhotos = photoService.activePlaylistId() ? activePlaylistPhotos() : photos();
           
           @if (currentPhotos.length === 0) {
@@ -707,13 +669,11 @@ interface CreatePlaylistState {
                     }
                   </div>
                 }
-                <!-- Spacer for bottom padding to avoid FAB overlap -->
                 <div class="h-32 w-full col-span-full"></div>
               </div>
             </div>
           }
         } @else {
-          <!-- Playlist List View -->
           <div class="h-full overflow-y-auto pb-20 no-scrollbar p-4 md:p-6">
              <button class="w-full py-3 mb-4 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2"
                 (click)="promptCreatePlaylist()">
@@ -755,7 +715,6 @@ interface CreatePlaylistState {
         }
       </div>
       
-      <!-- Simulation Toast -->
       @if (toastMessage()) {
           <div class="absolute bottom-12 left-1/2 -translate-x-1/2 z-[120] px-6 py-3 bg-slate-800/90 backdrop-blur-md rounded-full border border-slate-600 shadow-2xl animate-slide-up flex items-center gap-2 max-w-[90%] whitespace-nowrap">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -1212,35 +1171,68 @@ export class GalleryComponent {
       this.showWallpaperMenu.set(false);
   }
 
-  applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
+  // 🔥 2. 修正後的 applyPlaylistWallpaper 方法 (解決黑畫面問題)
+  async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       
-      const config = {
-          playlistId: this.photoService.activePlaylistId(),
-          interval: this.activePlaylist()?.interval,
-          sortOrder: this.activePlaylist()?.sortOrder, // Pass sort order to native config
-          mode: 'playlist',
-          target: type
-      };
+      const playlist = this.activePlaylist();
+      if (!playlist || playlist.photoIds.length === 0) {
+        this.showToast('錯誤：播放清單是空的');
+        return;
+      }
+
+      this.showToast('處理中...');
 
       try {
-          // 1. Save to Local Storage (Backup)
-          const jsonString = JSON.stringify(config);
-          localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonString);
+          // A. 儲存播放清單設定 (備份到 LocalStorage)
+          const config = {
+              playlistId: this.photoService.activePlaylistId(),
+              interval: this.activePlaylist()?.interval,
+              sortOrder: this.activePlaylist()?.sortOrder,
+              mode: 'playlist',
+              target: type
+          };
+          localStorage.setItem('LIVE_WALLPAPER_CONFIG', JSON.stringify(config));
           localStorage.setItem('LIVE_WALLPAPER_TIMESTAMP', Date.now().toString());
-          console.log('Playlist Config Saved:', config);
 
-          // 2. Call Native Bridge (APK Ready)
+          // B. 【暫時解決方案】取出第一張圖片作為桌布
+          // 因為目前的 Java 程式碼尚未支援播放清單輪播，我們先傳「第一張圖」確保不會黑畫面
+          const firstPhotoId = playlist.photoIds[0];
+          const firstPhoto = this.getPhotoById(firstPhotoId);
+          
+          if (!firstPhoto) {
+             throw new Error('找不到封面照片');
+          }
+
+          const sourcePath = (firstPhoto as any).path || (firstPhoto as any).webPath;
+
+          // 1. 搬移圖片到私有資料夾
+          const file = await Filesystem.readFile({
+            path: sourcePath
+          });
+
+          // 使用固定檔名 current_wallpaper.jpg，這樣 Native 就會讀取這張
+          const savedFile = await Filesystem.writeFile({
+            path: 'current_wallpaper.jpg', 
+            data: file.data,
+            directory: Directory.Data,
+            recursive: true
+          });
+
+          const nativePath = savedFile.uri.replace('file://', '');
+          console.log('播放清單封面已準備好:', nativePath);
+
+          // 2. 呼叫 Native Bridge (傳送路徑)
           if ((window as any).Android && (window as any).Android.setWallpaper) {
-              (window as any).Android.setWallpaper(jsonString);
-              this.toastMessage.set('已發送設定至 Android 系統');
+              (window as any).Android.setWallpaper(nativePath);
+              this.showToast('已設定播放清單封面為桌布');
           } else {
-              this.toastMessage.set('已儲存播放清單設定');
+              this.showToast('已儲存 (Bridge Inactive)');
           }
 
       } catch (e) {
           console.error(e);
-          this.toastMessage.set('儲存失敗');
+          this.showToast('設定失敗');
       }
 
       setTimeout(() => {
@@ -1309,4 +1301,3 @@ export class GalleryComponent {
       input.value = ''; // Reset input
   }
 }
-

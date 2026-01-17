@@ -1,8 +1,9 @@
-
 import { Component, computed, ElementRef, inject, input, OnDestroy, output, signal, viewChild, effect, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Photo, PhotoService } from '../../services/photo.service';
 import { SettingsService } from '../../services/settings.service';
+// 🔥 1. 引入 Capacitor 檔案系統套件
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 type FitMode = 'height' | 'width';
 
@@ -15,13 +16,11 @@ type FitMode = 'height' | 'width';
       (click)="onBackgroundClick($event)"
     >
       
-      <!-- Top Bar -->
       <div 
         class="absolute top-0 left-0 right-0 z-50 p-4 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent pointer-events-none transition-opacity duration-300"
         [class.opacity-0]="!uiVisible()"
         [class.opacity-100]="uiVisible()"
       >
-        <!-- Back Button -->
         <button 
           (click)="goBack.emit()" 
           class="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white hover:bg-white/10 transition-colors"
@@ -30,7 +29,6 @@ type FitMode = 'height' | 'width';
           Gallery
         </button>
 
-        <!-- New Checkmark Button (Top Right) -->
         <button 
           (click)="openWallpaperMenu()" 
           class="pointer-events-auto w-10 h-10 flex items-center justify-center bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white hover:bg-white/10 transition-colors"
@@ -39,7 +37,6 @@ type FitMode = 'height' | 'width';
         </button>
       </div>
 
-      <!-- Main Stage -->
       <div 
         class="flex-1 relative flex items-center justify-center overflow-hidden perspective-container cursor-move"
         (pointerdown)="onPointerDown($event)"
@@ -67,7 +64,6 @@ type FitMode = 'height' | 'width';
         </div>
       </div>
 
-      <!-- Settings Trigger Button -->
       <div 
         class="absolute bottom-6 right-6 z-40 transition-all duration-300 transform"
         [class.translate-y-20]="isSettingsOpen() || !uiVisible()"
@@ -81,7 +77,6 @@ type FitMode = 'height' | 'width';
         </button>
       </div>
 
-      <!-- Settings Panel -->
       <div 
         class="absolute bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-6 py-8 flex flex-col gap-6 z-50 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out"
         [class.translate-y-full]="!isSettingsOpen()"
@@ -98,7 +93,6 @@ type FitMode = 'height' | 'width';
               </button>
            </div>
 
-           <!-- Motion Controls -->
            <div class="space-y-3">
              <div class="flex justify-between items-center">
                <label class="text-sm font-medium text-slate-300">
@@ -137,14 +131,12 @@ type FitMode = 'height' | 'width';
              </div>
            </div>
 
-           <!-- Fit Mode & Zoom -->
            <div class="space-y-3">
              <div class="flex justify-between items-center">
                 <label class="text-sm font-medium text-slate-300">Image Fit</label>
                 <span class="text-xs text-emerald-400 font-mono">Zoom: {{ ((imageScale() - 1) * 100).toFixed(0) }}%</span>
              </div>
              
-             <!-- Fit Mode Buttons -->
              <div class="grid grid-cols-2 gap-2 bg-slate-800 p-1 rounded-lg">
                <button 
                  class="px-3 py-2 rounded-md text-sm font-medium transition-all"
@@ -166,7 +158,6 @@ type FitMode = 'height' | 'width';
                </button>
              </div>
 
-             <!-- Scale Slider -->
              <div class="flex items-center gap-3 pt-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                 <input 
@@ -179,7 +170,6 @@ type FitMode = 'height' | 'width';
              </div>
            </div>
 
-           <!-- Actions -->
            <div class="flex gap-4 pt-2 border-t border-white/10 mt-2">
              <button (click)="resetSettings()" class="flex-1 py-3 text-slate-400 font-medium hover:text-white transition-colors">Reset</button>
              <button (click)="saveSettings()" class="flex-[2] bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors py-3 shadow-lg active:scale-95">Save</button>
@@ -187,7 +177,6 @@ type FitMode = 'height' | 'width';
         </div>
       </div>
 
-      <!-- Wallpaper Menu (Set As Dialog) -->
       @if (showWallpaperMenu()) {
         <div class="absolute inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in" (click)="closeWallpaperMenu()">
             <div class="bg-slate-800 rounded-t-2xl sm:rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-700" (click)="$event.stopPropagation()">
@@ -212,7 +201,6 @@ type FitMode = 'height' | 'width';
         </div>
       }
 
-      <!-- Simulation Toast -->
       @if (toastMessage()) {
           <div class="absolute bottom-12 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 bg-slate-800/90 backdrop-blur-md rounded-full border border-slate-600 shadow-2xl animate-slide-up flex items-center gap-2 max-w-[90%] whitespace-nowrap">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -453,12 +441,25 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.showWallpaperMenu.set(false);
   }
 
-  applyWallpaper(type: 'home' | 'lock' | 'both') {
+  // 🔥 2. 修正後的 applyWallpaper 方法 (加入 Filesystem 搬移圖片邏輯)
+  async applyWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       
+      const currentPhoto = this.photo();
+      // 嘗試取得真實路徑 (path) 或是網頁路徑 (webPath)
+      const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
+
+      if (!sourcePath) {
+        this.toastMessage.set('錯誤：找不到圖片原始路徑');
+        return;
+      }
+
+      this.toastMessage.set('處理中...');
+
+      // 建立設定檔 (備份用)
       const config = {
-          photoId: this.photo().id,
-          photoUrl: this.photo().url,
+          photoId: currentPhoto.id,
+          photoUrl: currentPhoto.url,
           motionEnabled: this.motionEnabled(),
           motionStrength: this.motionStrength(),
           fitMode: this.fitMode(),
@@ -468,23 +469,48 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       };
 
       try {
-          // 1. Save to Local Storage
+          // A. 儲存設定到 LocalStorage (給 Web 端下次開啟時記得)
           const jsonString = JSON.stringify(config);
           localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonString);
           localStorage.setItem('LIVE_WALLPAPER_TIMESTAMP', Date.now().toString());
-          console.log('Wallpaper Configuration Saved:', config);
 
-          // 2. Call Native Bridge (APK Ready)
+          // B. 【關鍵步驟】複製圖片到 App 私有資料夾
+          // 1. 讀取圖片檔案
+          const file = await Filesystem.readFile({
+            path: sourcePath
+          });
+
+          // 2. 寫入到 Directory.Data (Native Service 一定讀得到這裡)
+          const fileName = 'current_wallpaper.jpg';
+          const savedFile = await Filesystem.writeFile({
+            path: fileName,
+            data: file.data,
+            directory: Directory.Data,
+            recursive: true
+          });
+
+          // 3. 取得乾淨的路徑字串 (移除 file:// 前綴)
+          const nativePath = savedFile.uri.replace('file://', '');
+          console.log('圖片已準備好，路徑:', nativePath);
+
+          // C. 呼叫 Native Bridge
           if ((window as any).Android && (window as any).Android.setWallpaper) {
-              (window as any).Android.setWallpaper(jsonString);
+              // 1. 傳送圖片路徑 (讓桌布顯示)
+              (window as any).Android.setWallpaper(nativePath);
+              
+              // 2. 如果 Java 端有支援 updateSettings，也把動態參數傳過去
+              if ((window as any).Android.updateSettings) {
+                 (window as any).Android.updateSettings(jsonString);
+              }
+
               this.toastMessage.set('已發送設定至 Android 系統');
           } else {
              this.toastMessage.set('已儲存設定 (Bridge Inactive)');
           }
 
       } catch (e) {
-          console.error('Failed to save wallpaper config', e);
-          this.toastMessage.set('儲存失敗');
+          console.error('Failed to save wallpaper', e);
+          this.toastMessage.set('設定失敗: ' + JSON.stringify(e));
       }
 
       setTimeout(() => {
