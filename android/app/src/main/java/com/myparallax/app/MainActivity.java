@@ -1,6 +1,7 @@
-package com.myparallax.app;
+package com.myparallax.app; // ⚠️ 請確認這行跟 AndroidManifest.xml 裡的 package="..." 一模一樣
 
 import android.content.Context;
+import android.content.Intent; // 新增
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
@@ -13,14 +14,14 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 1. 取得 WebView (Capacitor 的核心)
+        // 1. 取得 WebView
         WebView webView = this.getBridge().getWebView();
         
-        // 2. 注入橋接介面，讓 Web 可以呼叫 window.Android
+        // 2. 注入橋接介面
+        // 這行讓 Web 可以用 window.Android.saveSettings()
         webView.addJavascriptInterface(new WebAppInterface(this), "Android");
     }
 
-    // 定義橋接介面類別
     public class WebAppInterface {
         Context mContext;
 
@@ -28,16 +29,17 @@ public class MainActivity extends BridgeActivity {
             mContext = c;
         }
 
-        // Web 呼叫 window.Android.saveSettings(jsonString) 時會執行這裡
         @JavascriptInterface
         public void saveSettings(String jsonSettings) {
             SharedPreferences sharedPref = mContext.getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = sharedPref.edit();
             editor.putString("settings_json", jsonSettings);
-            editor.apply(); // 儲存成功！
+            editor.apply();
+
+            // 🔥 新增：發送廣播通知 Service 更新設定 (解決調整參數沒反應的問題)
+            sendUpdateBroadcast();
         }
         
-        // Web 呼叫 window.Android.setWallpaper(imagePath) 時執行
         @JavascriptInterface
         public void setWallpaper(String imagePath) {
              SharedPreferences sharedPref = mContext.getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
@@ -45,7 +47,17 @@ public class MainActivity extends BridgeActivity {
              editor.putString("current_image_path", imagePath);
              editor.apply();
              
-             // TODO: 這裡可以加入觸發 WallpaperService 重新載入圖片的廣播
+             // 🔥 新增：發送廣播通知 Service 換圖 (解決 TODO)
+             sendUpdateBroadcast();
+        }
+
+        // 輔助方法：發送廣播
+        private void sendUpdateBroadcast() {
+            // 這個字串必須跟 Service 裡的 IntentFilter 一致
+            Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
+            // 指定 Package 確保只有自己的 App 收得到
+            intent.setPackage(mContext.getPackageName());
+            mContext.sendBroadcast(intent);
         }
     }
 }
