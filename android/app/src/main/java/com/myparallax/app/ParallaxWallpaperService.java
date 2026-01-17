@@ -1,4 +1,4 @@
-package com.myparallax.app; // ⚠️ 確認 package name 跟你的其他檔案一樣
+package com.myparallax.app; // ⚠️ 確認 package name
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -26,7 +26,6 @@ import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import androidx.core.app.NotificationCompat;
 import org.json.JSONObject;
-
 import java.io.File;
 
 public class ParallaxWallpaperService extends WallpaperService {
@@ -38,18 +37,15 @@ public class ParallaxWallpaperService extends WallpaperService {
 
     private class ParallaxEngine extends Engine implements SensorEventListener {
         
-        // 核心元件
         private final Handler handler = new Handler();
         private SensorManager sensorManager;
         private Sensor accelerometer;
         private GestureDetector gestureDetector;
         private SharedPreferences prefs;
 
-        // 狀態變數
         private boolean visible = false;
         private boolean isPowerSaveMode = false;
         
-        // 設定值
         private Bitmap currentBitmap;
         private float scale = 1.2f;
         private float motionStrength = 1.0f;
@@ -58,22 +54,19 @@ public class ParallaxWallpaperService extends WallpaperService {
         private boolean pauseOnPowerSave = true;
         private boolean doubleTapToChange = false;
 
-        // 繪圖數據
         private float gyroX = 0;
         private float gyroY = 0;
         private int screenWidth, screenHeight;
 
-        // 接收 MainActivity 傳來的「更新訊號」
         private final BroadcastReceiver updateReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if ("com.myparallax.app.ACTION_UPDATE_WALLPAPER".equals(intent.getAction())) {
-                    loadSettings(); // 收到訊號，立刻重新讀取設定
+                    loadSettings();
                 }
             }
         };
 
-        // 接收系統「省電模式」訊號
         private final BroadcastReceiver powerSaveReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -85,7 +78,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
         };
 
-        // 繪圖迴圈
         private final Runnable drawRunner = new Runnable() {
             @Override
             public void run() {
@@ -96,28 +88,20 @@ public class ParallaxWallpaperService extends WallpaperService {
         @Override
         public void onCreate(SurfaceHolder surfaceHolder) {
             super.onCreate(surfaceHolder);
-
-            // 1. 初始化
             sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             prefs = getSharedPreferences("WallpaperPrefs", MODE_PRIVATE);
 
-            // 2. 雙擊偵測
             gestureDetector = new GestureDetector(getApplicationContext(), new GestureDetector.SimpleOnGestureListener() {
                 @Override
                 public boolean onDoubleTap(MotionEvent e) {
-                    if (doubleTapToChange) {
-                        System.out.println("Double Tap Detected!");
-                        // 未來可在此加入切換圖片邏輯
-                    }
+                    if (doubleTapToChange) System.out.println("Double Tap!");
                     return true;
                 }
             });
 
-            // 3. 註冊廣播
             IntentFilter filter = new IntentFilter();
             filter.addAction("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
-            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 registerReceiver(updateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
             } else {
@@ -125,7 +109,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
             registerReceiver(powerSaveReceiver, new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
 
-            // 4. 初始載入
             loadSettings();
         }
 
@@ -139,12 +122,11 @@ public class ParallaxWallpaperService extends WallpaperService {
             handler.removeCallbacks(drawRunner);
         }
 
-        // 🔥 關鍵修正：當畫面變為可見 (預覽/桌面) 時，強制重讀設定
         @Override
         public void onVisibilityChanged(boolean visible) {
             this.visible = visible;
             if (visible) {
-                loadSettings(); // <--- 這裡加了一行，解決黑畫面！
+                loadSettings(); // 強制重讀
                 updateSensorState();
             } else {
                 updateSensorState();
@@ -153,6 +135,7 @@ public class ParallaxWallpaperService extends WallpaperService {
 
         private void loadSettings() {
             String jsonStr = prefs.getString("settings_json", "{}");
+            // 這是最重要的路徑，由 MainActivity 複製進來的安全路徑
             String imagePath = prefs.getString("current_image_path", ""); 
 
             try {
@@ -165,22 +148,21 @@ public class ParallaxWallpaperService extends WallpaperService {
                 if (json.has("pauseOnPowerSave")) pauseOnPowerSave = json.getBoolean("pauseOnPowerSave");
                 if (json.has("doubleTapToChange")) doubleTapToChange = json.getBoolean("doubleTapToChange");
                 
-                // 優先使用 JSON 裡的路徑 (如果有)
-                if (json.has("path")) imagePath = json.getString("path");
+                // ⚠️ 移除 JSON 路徑覆蓋，只信任 MainActivity 傳來的安全路徑
+                // if (json.has("path")) imagePath = json.getString("path"); <--- 刪掉這行
 
                 if (!imagePath.isEmpty()) {
                     File imgFile = new File(imagePath);
                     if (imgFile.exists()) {
+                        // 嘗試解碼圖片
                         currentBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+                    } else {
+                        System.out.println("Image file not found: " + imagePath);
                     }
                 }
 
                 handleForegroundService();
-                
-                // 讀完立刻畫一次
-                if (visible) {
-                    draw();
-                }
+                if (visible) draw();
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -221,9 +203,7 @@ public class ParallaxWallpaperService extends WallpaperService {
 
         @Override
         public void onTouchEvent(MotionEvent event) {
-            if (gestureDetector != null) {
-                gestureDetector.onTouchEvent(event);
-            }
+            if (gestureDetector != null) gestureDetector.onTouchEvent(event);
             super.onTouchEvent(event);
         }
 
@@ -250,26 +230,26 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 canvas = holder.lockCanvas();
                 if (canvas != null) {
-                    // 🔥 防護網：如果圖片是空的，再試著讀一次
+                    // 1. 最後防線：如果圖片是空的
                     if (currentBitmap == null) {
-                        loadSettings();
+                        loadSettings(); // 再試一次
                     }
 
-                    // 如果還是空的，就畫黑色並離開，避免當機
+                    // 🔥 2. 除錯模式：如果還是空的，畫成【深藍色】
+                    // 這樣你就能區分是「程式沒跑(全黑)」還是「讀不到圖(全藍)」
                     if (currentBitmap == null) {
-                        canvas.drawColor(Color.BLACK);
+                        canvas.drawColor(Color.BLUE); 
                         return;
                     }
 
-                    // 1. 清空畫布
+                    // 3. 正常繪圖：先清空
                     canvas.drawColor(Color.BLACK);
 
-                    // 2. 計算偏移
+                    // 計算與繪製
                     float baseRange = 30f; 
                     float offsetX = (gyroX * baseRange * motionStrength);
                     float offsetY = (gyroY * baseRange * motionStrength);
 
-                    // 3. 建立矩陣
                     Matrix matrix = new Matrix();
                     float centerX = (float) screenWidth / 2;
                     float centerY = (float) screenHeight / 2;
@@ -280,7 +260,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                     matrix.postScale(scale, scale, centerX, centerY);
                     matrix.postTranslate(imageCenterX + offsetX, imageCenterY + offsetY);
 
-                    // 4. 繪製
                     canvas.drawBitmap(currentBitmap, matrix, null);
                 }
             } finally {
