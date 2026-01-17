@@ -1,5 +1,4 @@
-
-import { Component, inject, input, output, signal, computed, effect } from '@angular/core';
+import { Component, inject, input, output, signal, computed, effect, viewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Photo, Playlist, PhotoService, SortOrder } from '../../services/photo.service';
@@ -29,12 +28,246 @@ interface CreatePlaylistState {
   },
   template: `
     <div 
-      class="h-full flex flex-col relative select-none"
+      class="h-full flex flex-col relative select-none bg-slate-900 text-slate-100"
       (pointerup)="onGlobalPointerUp()"
       (pointercancel)="onGlobalPointerUp()"
       (pointermove)="onGlobalPointerMove($event)"
       (click)="onBackgroundClick($event)"
     >
+      @if (showSettings()) {
+          <!-- Full Page Settings View -->
+          <div class="h-full flex flex-col animate-fade-in bg-slate-900">
+             <!-- Settings Header -->
+             <div class="flex items-center gap-4 p-4 md:p-6 border-b border-slate-800 bg-slate-900 z-10 sticky top-0">
+               <button (click)="toggleSettings()" class="p-2 -ml-2 rounded-full hover:bg-slate-800 text-slate-300 transition-colors">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+               </button>
+               <h2 class="text-xl font-bold text-white">全域設定 (Global Settings)</h2>
+             </div>
+             
+             <div class="flex-1 overflow-y-auto custom-scroll p-4 md:p-6">
+                <div class="max-w-2xl mx-auto w-full space-y-8 pb-20">
+                  
+                  <!-- 1. Service & System Settings -->
+                  <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                    <h3 class="font-medium text-white flex items-center gap-2 mb-4">
+                       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                       服務與系統 (Service & System)
+                    </h3>
+                    
+                    <div class="space-y-6">
+                        <!-- Keep Alive Service -->
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="font-medium text-white">Keep Alive Service</div>
+                                <div class="text-xs text-slate-400 mt-1">作為前台服務運行，防止被系統自動關閉</div>
+                            </div>
+                            <button class="w-12 h-6 rounded-full transition-colors relative" 
+                                [class.bg-blue-600]="settings.settings().runInBackground" 
+                                [class.bg-slate-600]="!settings.settings().runInBackground" 
+                                (click)="updateSetting('runInBackground', !settings.settings().runInBackground)"
+                            >
+                                <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().runInBackground" [class.right-1]="settings.settings().runInBackground"></div>
+                            </button>
+                        </div>
+
+                        <!-- Pause on Power Save -->
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="font-medium text-white">Pause on Power Save</div>
+                                <div class="text-xs text-slate-400 mt-1">當系統開啟省電模式時，自動暫停效果</div>
+                            </div>
+                            <button class="w-12 h-6 rounded-full transition-colors relative" 
+                                [class.bg-emerald-600]="settings.settings().pauseOnPowerSave" 
+                                [class.bg-slate-600]="!settings.settings().pauseOnPowerSave" 
+                                (click)="updateSetting('pauseOnPowerSave', !settings.settings().pauseOnPowerSave)"
+                            >
+                                <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().pauseOnPowerSave" [class.right-1]="settings.settings().pauseOnPowerSave"></div>
+                            </button>
+                        </div>
+
+                        <!-- Reduced Motion -->
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="font-medium text-white">Reduced Motion</div>
+                                <div class="text-xs text-slate-400 mt-1">簡化動畫運算，降低電池消耗</div>
+                            </div>
+                            <button class="w-12 h-6 rounded-full transition-colors relative" 
+                                [class.bg-emerald-600]="settings.settings().batteryOptimization" 
+                                [class.bg-slate-600]="!settings.settings().batteryOptimization" 
+                                (click)="updateSetting('batteryOptimization', !settings.settings().batteryOptimization)"
+                            >
+                                <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().batteryOptimization" [class.right-1]="settings.settings().batteryOptimization"></div>
+                            </button>
+                        </div>
+
+                        <!-- Double Tap to Change -->
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="font-medium text-white">Double Tap to Change</div>
+                                <div class="text-xs text-slate-400 mt-1">雙擊主螢幕即可更換桌布</div>
+                            </div>
+                            <button class="w-12 h-6 rounded-full transition-colors relative" 
+                                [class.bg-emerald-600]="settings.settings().doubleTapToChange" 
+                                [class.bg-slate-600]="!settings.settings().doubleTapToChange" 
+                                (click)="updateSetting('doubleTapToChange', !settings.settings().doubleTapToChange)"
+                            >
+                              <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().doubleTapToChange" [class.right-1]="settings.settings().doubleTapToChange"></div>
+                            </button>
+                        </div>
+                    </div>
+                  </div>
+
+                  <!-- 2. Display Settings -->
+                  <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                      <h3 class="font-medium text-white flex items-center gap-2 mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                          顯示設定 (Display Settings)
+                      </h3>
+                       <!-- FPS -->
+                        <div class="flex justify-between items-center mb-2">
+                          <label class="text-sm font-medium text-slate-300">目標幀率 (Target FPS)</label>
+                          <span class="text-emerald-400 font-mono text-sm">{{ settings.settings().targetFps }} FPS</span>
+                        </div>
+                        <input type="range" min="30" max="120" step="30" [ngModel]="settings.settings().targetFps" (ngModelChange)="updateSetting('targetFps', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                  </div>
+
+                  <!-- 3. Motion Defaults -->
+                  <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                      <div class="flex justify-between items-center mb-4">
+                          <h3 class="font-medium text-white flex items-center gap-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
+                              全域動態預設值 (Global Motion)
+                          </h3>
+                          <button 
+                              class="w-12 h-6 rounded-full transition-colors relative" 
+                              [class.bg-emerald-600]="settings.settings().globalMotionEnabled" 
+                              [class.bg-slate-600]="!settings.settings().globalMotionEnabled" 
+                              (click)="updateSetting('globalMotionEnabled', !settings.settings().globalMotionEnabled)"
+                          >
+                              <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().globalMotionEnabled" [class.right-1]="settings.settings().globalMotionEnabled"></div>
+                          </button>
+                      </div>
+
+                      <div class="space-y-4" [class.opacity-50]="!settings.settings().globalMotionEnabled" [class.pointer-events-none]="!settings.settings().globalMotionEnabled">
+                          <div class="space-y-2">
+                              <div class="flex justify-between text-sm text-slate-300">
+                                  <span>強度 (Strength)</span>
+                                  <span class="font-mono text-emerald-400">{{ settings.settings().globalMotionStrength }}x</span>
+                              </div>
+                              <input 
+                                  type="range" min="0" max="5" step="0.1" 
+                                  [ngModel]="settings.settings().globalMotionStrength" 
+                                  (ngModelChange)="updateSetting('globalMotionStrength', $event)" 
+                                  class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                              >
+                          </div>
+
+                          <div class="pt-2 border-t border-slate-700/50">
+                              <button 
+                                  (click)="applyGlobalMotion()"
+                                  class="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                              >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                  套用到全部 (重置個別設定)
+                              </button>
+                              <p class="text-xs text-slate-500 mt-2 text-center">重置所有個別照片的動態設定，改為遵循此全域預設值。</p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <!-- 4. Thumbnail Appearance -->
+                  <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                     <h3 class="font-medium text-white mb-4 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                        縮圖外觀 (Thumbnail)
+                     </h3>
+
+                     <div class="space-y-6">
+                        <div>
+                            <div class="flex justify-between text-sm text-slate-300 mb-3">
+                                <span>形狀 (Shape)</span>
+                                <span class="text-emerald-400 capitalize">{{ settings.settings().thumbnailShape }}</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2">
+                                @for (shape of shapes; track shape.id) {
+                                    <button 
+                                        class="aspect-square bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all p-2"
+                                        [class.ring-2]="settings.settings().thumbnailShape === shape.id"
+                                        [class.ring-emerald-500]="settings.settings().thumbnailShape === shape.id"
+                                        [class.bg-slate-600]="settings.settings().thumbnailShape === shape.id"
+                                        [title]="shape.name"
+                                        (click)="updateSetting('thumbnailShape', shape.id)"
+                                    >
+                                        <div class="w-full h-full bg-slate-400" [ngStyle]="getShapeStyle(shape.id)"></div>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-sm text-slate-300 mb-2">
+                                <span>間距 (Gap)</span>
+                                <span class="font-mono text-emerald-400">{{ settings.settings().thumbnailGap }}px</span>
+                            </div>
+                            <input type="range" min="0" max="48" step="4" [ngModel]="settings.settings().thumbnailGap" (ngModelChange)="updateSetting('thumbnailGap', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" >
+                        </div>
+                     </div>
+                  </div>
+
+                  <!-- 5. Trash Bin -->
+                  <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                    <div class="flex justify-between items-center mb-4">
+                      <h3 class="font-medium text-white flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        垃圾桶 (Trash)
+                      </h3>
+                      <span class="px-2 py-1 bg-slate-900 rounded-lg text-xs text-slate-400 font-mono">{{ trashCount() }} items</span>
+                    </div>
+                    
+                    @if (trashCount() > 0) {
+                      <div class="flex gap-3">
+                        <button (click)="cleanAllTrash()" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                           清空全部
+                        </button>
+                        <button (click)="restoreAllTrash()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                           全部還原
+                        </button>
+                      </div>
+                    } @else {
+                      <div class="text-sm text-slate-500 text-center py-2 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                        垃圾桶是空的
+                      </div>
+                    }
+                  </div>
+
+                  <!-- 6. Data Management (Backup/Restore) -->
+                  <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                     <h3 class="font-medium text-white flex items-center gap-2 mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        備份與還原 (Backup & Restore)
+                     </h3>
+                     <p class="text-sm text-slate-400 mb-4">
+                        將您的設定、縮放比例和播放清單儲存為檔案。還原時，系統會自動比對照片 ID 或檔名來套用設定。
+                     </p>
+                     <div class="flex gap-3">
+                        <button (click)="downloadBackup()" class="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-colors text-sm font-medium flex items-center justify-center gap-2 border border-slate-600">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                           備份設定
+                        </button>
+                        <button (click)="triggerRestore()" class="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 shadow-lg">
+                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                           還原設定
+                        </button>
+                        <input #restoreInput type="file" accept=".json" class="hidden" (change)="onRestoreFileSelected($event)">
+                     </div>
+                  </div>
+                 </div>
+              </div>
+          </div>
+      } @else {
       <!-- Header -->
       <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 min-h-[44px] shrink-0 p-4 md:p-6 pb-0">
         @if (photoService.activePlaylistId()) {
@@ -96,7 +329,7 @@ interface CreatePlaylistState {
                         [checked]="isAllSelected()"
                         (change)="toggleSelectAll()"
                       >
-                      <span class="text-sm font-medium text-slate-200 whitespace-nowrap">Select All</span>
+                      <span class="text-sm font-medium text-slate-200 whitespace-nowrap">全選</span>
                     </label>
 
                     <!-- REMOVE BUTTON (Context Aware - Header) -->
@@ -108,7 +341,7 @@ interface CreatePlaylistState {
                             title="Remove from Playlist"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-                            <span class="text-sm font-medium hidden sm:inline">Remove</span>
+                            <span class="text-sm font-medium hidden sm:inline">移除</span>
                         </button>
                     } @else {
                         <!-- Main Mode: Move to Trash -->
@@ -118,7 +351,7 @@ interface CreatePlaylistState {
                             title="Move to Trash"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-400 group-hover:text-white"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                            <span class="text-sm font-medium hidden sm:inline">Trash</span>
+                            <span class="text-sm font-medium hidden sm:inline">刪除</span>
                         </button>
                     }
 
@@ -141,9 +374,9 @@ interface CreatePlaylistState {
                     <input #folderInput type="file" webkitdirectory directory multiple class="hidden" (change)="onFileSelected($event)">
 
                     <div class="flex rounded-lg bg-slate-800 p-1 ml-auto">
-                    <button (click)="fileInput.click()" class="px-3 py-1.5 text-sm font-medium hover:text-white text-slate-300 transition-colors">+ Files</button>
+                    <button (click)="fileInput.click()" class="px-3 py-1.5 text-sm font-medium hover:text-white text-slate-300 transition-colors">+ 檔案</button>
                     <div class="w-px bg-slate-700 my-1"></div>
-                    <button (click)="folderInput.click()" class="px-3 py-1.5 text-sm font-medium hover:text-white text-slate-300 transition-colors">+ Folder</button>
+                    <button (click)="folderInput.click()" class="px-3 py-1.5 text-sm font-medium hover:text-white text-slate-300 transition-colors">+ 資料夾</button>
                     </div>
                 }
               }
@@ -160,7 +393,7 @@ interface CreatePlaylistState {
             [class.text-slate-400]="activeTab() !== 'photos'"
             (click)="activeTab.set('photos')"
             >
-            All Photos
+            所有照片
             @if (activeTab() === 'photos') { <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full"></div> }
             </button>
             <button 
@@ -169,7 +402,7 @@ interface CreatePlaylistState {
             [class.text-slate-400]="activeTab() !== 'playlists'"
             (click)="activeTab.set('playlists')"
             >
-            Playlists
+            播放清單
             @if (activeTab() === 'playlists') { <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 rounded-full"></div> }
             </button>
         </div>
@@ -210,13 +443,13 @@ interface CreatePlaylistState {
             <div class="absolute inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="closeActionMenu()">
                 <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-700 flex flex-col gap-2" (click)="$event.stopPropagation()">
                     <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-700">
-                        <h3 class="text-lg font-bold text-white">More Actions</h3>
-                        <span class="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded">{{ selectedIds().length }} Items</span>
+                        <h3 class="text-lg font-bold text-white">更多動作</h3>
+                        <span class="text-xs text-slate-400 bg-slate-900 px-2 py-1 rounded">{{ selectedIds().length }} 個項目</span>
                     </div>
 
                     <!-- Add to Playlist -->
                     <div class="relative">
-                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Add to Playlist</label>
+                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">加入播放清單</label>
                         <div class="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scroll">
                             @for (pl of playlists(); track pl.id) {
                             <button 
@@ -236,7 +469,7 @@ interface CreatePlaylistState {
                                 <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                 </div>
-                                New Playlist
+                                建立新清單
                             </button>
                         </div>
                     </div>
@@ -250,7 +483,7 @@ interface CreatePlaylistState {
                             class="w-full text-left px-4 py-3 bg-slate-700/50 hover:bg-slate-700 rounded-xl text-slate-200 transition-colors flex items-center gap-3"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                            View Details
+                            查看詳細資訊
                         </button>
                     }
                 </div>
@@ -262,19 +495,19 @@ interface CreatePlaylistState {
            <div class="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelDelete()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-700" (click)="$event.stopPropagation()">
                  <h3 class="text-xl font-bold text-white mb-2">
-                     @if (photoService.activePlaylistId()) { Remove from Playlist? } @else { Move to Trash? }
+                     @if (photoService.activePlaylistId()) { 從播放清單移除? } @else { 移至垃圾桶? }
                  </h3>
                  <p class="text-slate-400 mb-6">
                     @if (photoService.activePlaylistId()) {
-                        Are you sure you want to remove {{ selectedIds().length }} item(s) from "{{activePlaylist()?.name}}"? They will stay in your main gallery.
+                        確定要將 {{ selectedIds().length }} 個項目從 "{{activePlaylist()?.name}}" 移除嗎? 它們仍會保留在您的主相簿中。
                     } @else {
-                        Are you sure you want to move {{ selectedIds().length }} item(s) to the trash?
+                        確定要將 {{ selectedIds().length }} 個項目移至垃圾桶嗎?
                     }
                  </p>
                  <div class="flex gap-3">
-                    <button (click)="cancelDelete()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">Cancel</button>
+                    <button (click)="cancelDelete()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">取消</button>
                     <button (click)="confirmDelete()" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-colors font-medium">
-                        @if (photoService.activePlaylistId()) { Remove } @else { Trash }
+                        @if (photoService.activePlaylistId()) { 移除 } @else { 刪除 }
                     </button>
                  </div>
               </div>
@@ -285,23 +518,23 @@ interface CreatePlaylistState {
         @if (createPlaylistState().visible) {
            <div class="absolute inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelCreatePlaylist()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-blue-500/30" (click)="$event.stopPropagation()">
-                 <h3 class="text-xl font-bold text-white mb-4">Create Playlist</h3>
+                 <h3 class="text-xl font-bold text-white mb-4">建立播放清單</h3>
                  <div class="space-y-4">
                     <div class="space-y-2">
-                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">Playlist Name</label>
+                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">清單名稱</label>
                         <input 
                             #playlistNameInput
                             type="text" 
                             [value]="createPlaylistState().name" 
                             (input)="updateCreatePlaylistName($event)"
                             class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-blue-500 outline-none"
-                            placeholder="My Awesome Playlist"
+                            placeholder="我的播放清單"
                             (keyup.enter)="confirmCreatePlaylist()"
                         >
                     </div>
                      <div class="flex gap-3">
-                        <button (click)="cancelCreatePlaylist()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">Cancel</button>
-                        <button (click)="confirmCreatePlaylist()" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors font-bold">Create</button>
+                        <button (click)="cancelCreatePlaylist()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">取消</button>
+                        <button (click)="confirmCreatePlaylist()" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors font-bold">建立</button>
                      </div>
                  </div>
               </div>
@@ -312,11 +545,11 @@ interface CreatePlaylistState {
         @if (deletePlaylistConfirmVisible()) {
            <div class="absolute inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelDeletePlaylist()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-red-500/30" (click)="$event.stopPropagation()">
-                 <h3 class="text-xl font-bold text-white mb-2 text-red-400">Delete Playlist?</h3>
-                 <p class="text-slate-400 mb-6">Are you sure you want to delete "{{ tempPlaylistName }}"? Photos will remain in your main gallery.</p>
+                 <h3 class="text-xl font-bold text-white mb-2 text-red-400">刪除播放清單?</h3>
+                 <p class="text-slate-400 mb-6">確定要刪除 "{{ tempPlaylistName }}" 嗎? 照片仍會保留在您的主相簿中。</p>
                  <div class="flex gap-3">
-                    <button (click)="cancelDeletePlaylist()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">Cancel</button>
-                    <button (click)="confirmDeletePlaylist()" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-colors font-medium">Delete</button>
+                    <button (click)="cancelDeletePlaylist()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">取消</button>
+                    <button (click)="confirmDeletePlaylist()" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-colors font-medium">刪除</button>
                  </div>
               </div>
            </div>
@@ -325,11 +558,11 @@ interface CreatePlaylistState {
         @if (showEmptyTrashConfirm()) {
            <div class="absolute inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelEmptyTrash()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-red-500/30" (click)="$event.stopPropagation()">
-                 <h3 class="text-xl font-bold text-white mb-2 text-red-400">Empty Trash?</h3>
-                 <p class="text-slate-400 mb-6">Permanently delete {{ trashCount() }} item(s)? This cannot be undone.</p>
+                 <h3 class="text-xl font-bold text-white mb-2 text-red-400">清空垃圾桶?</h3>
+                 <p class="text-slate-400 mb-6">永久刪除 {{ trashCount() }} 個項目? 此動作無法復原。</p>
                  <div class="flex gap-3">
-                    <button (click)="cancelEmptyTrash()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">Cancel</button>
-                    <button (click)="confirmEmptyTrash()" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-colors font-medium">Delete Forever</button>
+                    <button (click)="cancelEmptyTrash()" class="flex-1 py-2.5 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">取消</button>
+                    <button (click)="confirmEmptyTrash()" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-colors font-medium">永久刪除</button>
                  </div>
               </div>
            </div>
@@ -367,32 +600,32 @@ interface CreatePlaylistState {
            <div class="absolute inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" (click)="closePlaylistSettings()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-slate-700 space-y-6" (click)="$event.stopPropagation()">
                  <div class="flex justify-between items-center">
-                    <h3 class="text-xl font-bold text-white">Playlist Settings</h3>
+                    <h3 class="text-xl font-bold text-white">播放清單設定</h3>
                     <button (click)="closePlaylistSettings()" class="text-slate-400 hover:text-white"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
                  </div>
 
                  <!-- Rename -->
                  <div class="space-y-2">
-                    <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">Name</label>
+                    <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">名稱</label>
                     <input type="text" [(ngModel)]="tempPlaylistName" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-emerald-500 outline-none">
                  </div>
 
                  <!-- Interval -->
                  <div class="space-y-2">
                     <div class="flex justify-between">
-                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">Wallpaper Cycle Interval</label>
-                        <span class="text-emerald-400 font-mono text-sm">{{ tempPlaylistInterval }}s</span>
+                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">桌布切換間隔</label>
+                        <span class="text-emerald-400 font-mono text-sm">{{ tempPlaylistInterval }}秒</span>
                     </div>
                     <input type="range" min="1" max="300" [(ngModel)]="tempPlaylistInterval" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     <div class="flex justify-between text-xs text-slate-500">
-                        <span>1s</span>
-                        <span>300s</span>
+                        <span>1秒</span>
+                        <span>300秒</span>
                     </div>
                  </div>
 
                  <!-- Sort Order Dropdown -->
                  <div class="space-y-2">
-                    <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">Sort Order</label>
+                    <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">排序方式</label>
                     <div class="relative">
                         <select [(ngModel)]="tempSortOrder" class="w-full appearance-none bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:border-emerald-500 outline-none pr-10">
                             <option value="custom">自訂 (加入順序)</option>
@@ -409,225 +642,11 @@ interface CreatePlaylistState {
                  </div>
 
                  <div class="pt-4 border-t border-slate-700 flex flex-col gap-3">
-                    <button (click)="savePlaylistSettings()" class="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors">Save Changes</button>
-                    <button (click)="requestDeletePlaylist()" class="w-full py-3 text-red-400 font-medium hover:text-red-300 transition-colors border border-red-500/30 rounded-xl hover:bg-red-500/10">Delete Playlist</button>
+                    <button (click)="savePlaylistSettings()" class="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors">儲存變更</button>
+                    <button (click)="requestDeletePlaylist()" class="w-full py-3 text-red-400 font-medium hover:text-red-300 transition-colors border border-red-500/30 rounded-xl hover:bg-red-500/10">刪除播放清單</button>
                  </div>
               </div>
            </div>
-        }
-
-        <!-- Settings Modal (Global) -->
-        @if (showSettings()) {
-          <div class="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-sm p-4 animate-fade-in flex flex-col overflow-y-auto">
-             <div class="flex justify-between items-center mb-8 shrink-0">
-               <h2 class="text-2xl font-bold text-white">Global Settings</h2>
-               <button (click)="toggleSettings()" class="p-2 bg-slate-800 rounded-full hover:bg-slate-700 text-slate-300">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-               </button>
-             </div>
-             
-             <div class="max-w-2xl mx-auto w-full space-y-8 pb-20">
-              
-              <!-- Trash Bin -->
-              <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                <div class="flex justify-between items-center mb-4">
-                  <h3 class="font-medium text-white flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                    Trash Bin
-                  </h3>
-                  <span class="px-2 py-1 bg-slate-900 rounded-lg text-xs text-slate-400 font-mono">{{ trashCount() }} items</span>
-                </div>
-                
-                @if (trashCount() > 0) {
-                  <div class="flex gap-3">
-                    <button (click)="cleanAllTrash()" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2">
-                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                       Clean All (Empty Trash)
-                    </button>
-                    <button (click)="restoreAllTrash()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2">
-                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
-                       Restore All
-                    </button>
-                  </div>
-                } @else {
-                  <div class="text-sm text-slate-500 text-center py-2 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                    Trash is empty
-                  </div>
-                }
-              </div>
-
-              <!-- Service & System Settings -->
-              <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                <h3 class="font-medium text-white flex items-center gap-2 mb-4">
-                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                   Service & System
-                </h3>
-                
-                <div class="space-y-4">
-                    <!-- Keep Alive Service -->
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="font-medium text-white">Keep Alive Service</div>
-                            <div class="text-xs text-slate-400 mt-1">Run as Foreground Service (Prevents Killing) & Start on Boot</div>
-                        </div>
-                        <button class="w-12 h-6 rounded-full transition-colors relative" 
-                            [class.bg-blue-600]="settings.settings().runInBackground" 
-                            [class.bg-slate-600]="!settings.settings().runInBackground" 
-                            (click)="updateSetting('runInBackground', !settings.settings().runInBackground)"
-                        >
-                            <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().runInBackground" [class.right-1]="settings.settings().runInBackground"></div>
-                        </button>
-                    </div>
-
-                    <div class="h-px bg-slate-700/50"></div>
-
-                    <!-- Power Save Pause -->
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="font-medium text-white">Pause on Power Save</div>
-                            <div class="text-xs text-slate-400 mt-1">Stop rotation & interactions when system power save is on</div>
-                        </div>
-                        <button class="w-12 h-6 rounded-full transition-colors relative" 
-                            [class.bg-emerald-600]="settings.settings().pauseOnPowerSave" 
-                            [class.bg-slate-600]="!settings.settings().pauseOnPowerSave" 
-                            (click)="updateSetting('pauseOnPowerSave', !settings.settings().pauseOnPowerSave)"
-                        >
-                            <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().pauseOnPowerSave" [class.right-1]="settings.settings().pauseOnPowerSave"></div>
-                        </button>
-                    </div>
-                </div>
-              </div>
-
-              <!-- Visual Performance -->
-              <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                  <h3 class="font-medium text-white flex items-center gap-2 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                      Visual Performance
-                  </h3>
-
-                  <div class="space-y-4">
-                      <!-- Reduced Motion -->
-                      <div class="flex items-center justify-between">
-                        <div>
-                            <div class="font-medium text-white">Reduced Motion</div>
-                            <div class="text-xs text-slate-400 mt-1">Simplify animations to save battery (formerly "Battery Opt")</div>
-                        </div>
-                        <button class="w-12 h-6 rounded-full transition-colors relative" 
-                            [class.bg-emerald-600]="settings.settings().batteryOptimization" 
-                            [class.bg-slate-600]="!settings.settings().batteryOptimization" 
-                            (click)="updateSetting('batteryOptimization', !settings.settings().batteryOptimization)"
-                        >
-                            <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().batteryOptimization" [class.right-1]="settings.settings().batteryOptimization"></div>
-                        </button>
-                     </div>
-
-                     <!-- FPS -->
-                     <div class="pt-2">
-                        <div class="flex justify-between items-center mb-2">
-                          <label class="text-sm font-medium text-slate-300">Target FPS</label>
-                          <span class="text-emerald-400 font-mono text-sm">{{ settings.settings().targetFps }} FPS</span>
-                        </div>
-                        <input type="range" min="30" max="120" step="30" [ngModel]="settings.settings().targetFps" (ngModelChange)="updateSetting('targetFps', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
-                     </div>
-                  </div>
-              </div>
-
-              <!-- Motion Defaults -->
-              <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                  <div class="flex justify-between items-center mb-4">
-                      <h3 class="font-medium text-white flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
-                          Global Motion Defaults
-                      </h3>
-                      <button 
-                          class="w-12 h-6 rounded-full transition-colors relative" 
-                          [class.bg-emerald-600]="settings.settings().globalMotionEnabled" 
-                          [class.bg-slate-600]="!settings.settings().globalMotionEnabled" 
-                          (click)="updateSetting('globalMotionEnabled', !settings.settings().globalMotionEnabled)"
-                      >
-                          <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().globalMotionEnabled" [class.right-1]="settings.settings().globalMotionEnabled"></div>
-                      </button>
-                  </div>
-
-                  <div class="space-y-4" [class.opacity-50]="!settings.settings().globalMotionEnabled" [class.pointer-events-none]="!settings.settings().globalMotionEnabled">
-                      <div class="space-y-2">
-                          <div class="flex justify-between text-sm text-slate-300">
-                              <span>Strength</span>
-                              <span class="font-mono text-emerald-400">{{ settings.settings().globalMotionStrength }}x</span>
-                          </div>
-                          <input 
-                              type="range" min="0" max="3" step="0.1" 
-                              [ngModel]="settings.settings().globalMotionStrength" 
-                              (ngModelChange)="updateSetting('globalMotionStrength', $event)" 
-                              class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                          >
-                      </div>
-
-                      <div class="pt-2 border-t border-slate-700/50">
-                          <button 
-                              (click)="applyGlobalMotion()"
-                              class="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-                          >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                              Apply to All (Reset Individual Settings)
-                          </button>
-                          <p class="text-xs text-slate-500 mt-2 text-center">Resets any individual photo motion settings to follow these defaults.</p>
-                      </div>
-                  </div>
-              </div>
-
-              <!-- Thumbnail Appearance -->
-              <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                 <h3 class="font-medium text-white mb-4 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                    Thumbnail Appearance
-                 </h3>
-
-                 <div class="space-y-6">
-                    <div>
-                        <div class="flex justify-between text-sm text-slate-300 mb-3">
-                            <span>Shape</span>
-                            <span class="text-emerald-400 capitalize">{{ settings.settings().thumbnailShape }}</span>
-                        </div>
-                        <div class="grid grid-cols-4 gap-2">
-                            @for (shape of shapes; track shape.id) {
-                                <button 
-                                    class="aspect-square bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all p-2"
-                                    [class.ring-2]="settings.settings().thumbnailShape === shape.id"
-                                    [class.ring-emerald-500]="settings.settings().thumbnailShape === shape.id"
-                                    [class.bg-slate-600]="settings.settings().thumbnailShape === shape.id"
-                                    [title]="shape.name"
-                                    (click)="updateSetting('thumbnailShape', shape.id)"
-                                >
-                                    <div class="w-full h-full bg-slate-400" [ngStyle]="getShapeStyle(shape.id)"></div>
-                                </button>
-                            }
-                        </div>
-                    </div>
-
-                    <div>
-                        <div class="flex justify-between text-sm text-slate-300 mb-2">
-                            <span>Grid Gap</span>
-                            <span class="font-mono text-emerald-400">{{ settings.settings().thumbnailGap }}px</span>
-                        </div>
-                        <input type="range" min="0" max="48" step="4" [ngModel]="settings.settings().thumbnailGap" (ngModelChange)="updateSetting('thumbnailGap', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
-                    </div>
-                 </div>
-              </div>
-              
-              <!-- Double Tap Toggle (Standalone) -->
-              <div class="bg-slate-800 p-5 rounded-2xl border border-slate-700 flex items-center justify-between">
-                <div>
-                    <div class="font-medium text-white">Double Tap to Change</div>
-                    <div class="text-xs text-slate-400 mt-1">雙擊主螢幕即可更換桌布</div>
-                </div>
-                <button class="w-12 h-6 rounded-full transition-colors relative" [class.bg-emerald-600]="settings.settings().doubleTapToChange" [class.bg-slate-600]="!settings.settings().doubleTapToChange" (click)="updateSetting('doubleTapToChange', !settings.settings().doubleTapToChange)">
-                  <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().doubleTapToChange" [class.right-1]="settings.settings().doubleTapToChange"></div>
-                </button>
-             </div>
-
-             </div>
-          </div>
         }
 
         <!-- Tab Content Logic -->
@@ -640,8 +659,8 @@ interface CreatePlaylistState {
                <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4 text-slate-500">
                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                </div>
-               <h3 class="text-xl font-medium text-white mb-2">No photos</h3>
-               <p class="text-slate-400 max-w-sm">Use the buttons above to import.</p>
+               <h3 class="text-xl font-medium text-white mb-2">沒有照片</h3>
+               <p class="text-slate-400 max-w-sm">使用上方按鈕匯入照片。</p>
             </div>
           } @else {
             <div 
@@ -699,7 +718,7 @@ interface CreatePlaylistState {
              <button class="w-full py-3 mb-4 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2"
                 (click)="promptCreatePlaylist()">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                Create New Playlist
+                建立新播放清單
              </button>
 
              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -710,7 +729,7 @@ interface CreatePlaylistState {
                   >
                      <div class="flex justify-between items-start mb-2">
                         <h3 class="font-bold text-white group-hover:text-emerald-400 transition-colors">{{ playlist.name }}</h3>
-                        <span class="text-xs bg-slate-900 px-2 py-1 rounded text-slate-400">{{ playlist.photoIds.length }} items</span>
+                        <span class="text-xs bg-slate-900 px-2 py-1 rounded text-slate-400">{{ playlist.photoIds.length }} 個項目</span>
                      </div>
                      <div class="aspect-video bg-slate-900 rounded-lg flex items-center justify-center text-slate-600 overflow-hidden relative">
                         @if(playlist.photoIds.length > 0) {
@@ -726,7 +745,7 @@ interface CreatePlaylistState {
                         }
                      </div>
                      <div class="flex justify-between items-center mt-2">
-                         <p class="text-xs text-slate-500">{{ playlist.interval }}s cycle</p>
+                         <p class="text-xs text-slate-500">{{ playlist.interval }}秒 循環</p>
                          <p class="text-xs text-slate-500 capitalize">{{ formatSortOrder(playlist.sortOrder) }}</p>
                      </div>
                   </button>
@@ -742,6 +761,7 @@ interface CreatePlaylistState {
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             <span class="font-medium text-white text-sm">{{ toastMessage() }}</span>
           </div>
+      }
       }
     </div>
   `,
@@ -779,6 +799,9 @@ export class GalleryComponent {
   photoService = inject(PhotoService);
   playlists = this.photoService.playlists;
   settings = inject(SettingsService);
+  
+  // Reference to hidden file input
+  restoreInput = viewChild<ElementRef<HTMLInputElement>>('restoreInput');
 
   selectPhoto = output<string>();
   importFiles = output<FileList>();
@@ -797,9 +820,6 @@ export class GalleryComponent {
   deletePlaylistConfirmVisible = signal(false);
   pendingDeletePlaylistId = signal<string | null>(null);
 
-  // Playlist Navigation (Now handled via Service for persistence, but we can expose it here if needed or just use service directly in template)
-  // We use the service signal directly in template for source of truth.
-  
   // Playlist Settings State (3-dot menu)
   playlistSettingsState = signal<PlaylistSettingsState>({ visible: false, playlistId: null });
   tempPlaylistName = '';
@@ -914,9 +934,9 @@ export class GalleryComponent {
     if (input.files && input.files.length > 0) {
       const count = this.photoService.addPhotos(input.files);
       if (count > 0) {
-        this.showToast(`Imported ${count} photos`);
+        this.showToast(`已匯入 ${count} 張照片`);
       } else {
-        this.showToast('No new photos imported (Duplicates detected)');
+        this.showToast('沒有匯入新照片 (重複的檔案)');
       }
     }
     input.value = '';
@@ -1024,7 +1044,7 @@ export class GalleryComponent {
   
   applyGlobalMotion() { 
       this.photoService.clearAllMotionOverrides();
-      alert(`Applied global motion settings to all photos (overrides cleared).`); 
+      alert(`已將全域動態設定套用到所有照片 (已清除個別設定)。`); 
   }
 
   clearSelection() {
@@ -1247,4 +1267,46 @@ export class GalleryComponent {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
+
+  // --- BACKUP & RESTORE UI ---
+
+  downloadBackup() {
+      const data = this.photoService.generateBackup();
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `parallax-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      this.showToast('備份檔案已產生!');
+  }
+
+  triggerRestore() {
+      this.restoreInput()?.nativeElement.click();
+  }
+
+  onRestoreFileSelected(event: Event) {
+      const input = event.target as HTMLInputElement;
+      if (input.files && input.files[0]) {
+          const file = input.files[0];
+          const reader = new FileReader();
+          
+          reader.onload = (e) => {
+              const content = e.target?.result as string;
+              if (content) {
+                  const result = this.photoService.restoreBackup(content);
+                  this.showToast(result.message);
+              }
+          };
+          
+          reader.readAsText(file);
+      }
+      input.value = ''; // Reset input
+  }
 }
+

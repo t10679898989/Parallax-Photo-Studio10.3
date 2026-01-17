@@ -1,5 +1,5 @@
 
-import { Injectable, signal, effect } from '@angular/core';
+import { Injectable, signal, effect, computed } from '@angular/core';
 
 export type ThumbnailShape = 'squircle' | 'square' | 'rounded' | 'circle' | 'bevel' | 'leaf' | 'hexagon' | 'diamond';
 
@@ -45,6 +45,12 @@ export class SettingsService {
     doubleTapToChange: false
   });
 
+  // CENTRAL LOGIC: Are we actually paused right now?
+  // Returns true ONLY IF: "Pause on Power Save" is ON AND "System Power Save" is ACTIVE.
+  isEffectivelyPaused = computed(() => {
+      return this.settings().pauseOnPowerSave && this.isSystemPowerSave();
+  });
+
   constructor() {
     // Attempt to load from localStorage
     const saved = localStorage.getItem('app_settings');
@@ -62,12 +68,24 @@ export class SettingsService {
       const json = JSON.stringify(this.settings());
       localStorage.setItem('app_settings', json);
       
-      // Native Bridge Call
-      // Tell Android Native Wrapper that settings have updated
-      // Android should read 'runInBackground' to start/stop the Foreground Service
+      // Native Bridge Call 1: Update Settings Data
       if ((window as any).Android && (window as any).Android.updateSettings) {
           (window as any).Android.updateSettings(json);
       }
+    });
+
+    // Effect: Update Notification Text based on "Effectively Paused" state
+    effect(() => {
+        const isPaused = this.isEffectivelyPaused();
+        
+        // Native Bridge Call 2: Update Service Notification Text
+        // If paused, Android should show "Paused in Power Save"
+        // If running, Android should show "Parallax Studio Running" or "Playlist Active"
+        if ((window as any).Android && (window as any).Android.updateServiceNotification) {
+            (window as any).Android.updateServiceNotification(isPaused ? 'paused' : 'active');
+        }
+        
+        console.log(`[App State] Effectively Paused: ${isPaused}`);
     });
   }
 
@@ -78,6 +96,5 @@ export class SettingsService {
   // Method called by Native Android when system power save toggles
   setSystemPowerSave(isActive: boolean) {
     this.isSystemPowerSave.set(isActive);
-    console.log('System Power Save State Changed:', isActive);
   }
 }

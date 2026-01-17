@@ -42,14 +42,16 @@ type FitMode = 'height' | 'width';
       <!-- Main Stage -->
       <div 
         class="flex-1 relative flex items-center justify-center overflow-hidden perspective-container cursor-move"
-        (pointerdown)="startDrag($event)"
-        (pointermove)="onDrag($event)"
-        (pointerup)="endDrag()"
-        (pointerleave)="endDrag()"
+        (pointerdown)="onPointerDown($event)"
+        (pointermove)="onPointerMove($event)"
+        (pointerup)="onPointerUp($event)"
+        (pointerleave)="onPointerUp($event)"
+        (pointercancel)="onPointerUp($event)"
+        (wheel)="onWheel($event)"
       >
         <div 
           class="relative will-change-transform shadow-2xl transition-transform ease-linear"
-          [style.transition-duration]="smoothness()"
+          [style.transition-duration]="isPinching ? '0ms' : smoothness()"
           [style.transform]="transformStyle()"
         >
            <img 
@@ -124,7 +126,7 @@ type FitMode = 'height' | 'width';
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
                </button>
                <input 
-                 type="range" min="0" max="3" step="0.1"
+                 type="range" min="0" max="5" step="0.1"
                  [value]="motionStrength()"
                  (input)="updateStrength($event)"
                  class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer transition-all"
@@ -135,9 +137,14 @@ type FitMode = 'height' | 'width';
              </div>
            </div>
 
-           <!-- Fit Mode -->
+           <!-- Fit Mode & Zoom -->
            <div class="space-y-3">
-             <label class="text-sm font-medium text-slate-300">Image Fit</label>
+             <div class="flex justify-between items-center">
+                <label class="text-sm font-medium text-slate-300">Image Fit</label>
+                <span class="text-xs text-emerald-400 font-mono">Zoom: {{ ((imageScale() - 1) * 100).toFixed(0) }}%</span>
+             </div>
+             
+             <!-- Fit Mode Buttons -->
              <div class="grid grid-cols-2 gap-2 bg-slate-800 p-1 rounded-lg">
                <button 
                  class="px-3 py-2 rounded-md text-sm font-medium transition-all"
@@ -157,6 +164,18 @@ type FitMode = 'height' | 'width';
                >
                  Horizontal
                </button>
+             </div>
+
+             <!-- Scale Slider -->
+             <div class="flex items-center gap-3 pt-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                <input 
+                   type="range" min="1.0" max="3.0" step="0.05"
+                   [value]="imageScale()"
+                   (input)="updateScale($event)"
+                   class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-300"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
              </div>
            </div>
 
@@ -228,6 +247,8 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   uiVisible = signal(true);
   
   fitMode = signal<FitMode>('height');
+  imageScale = signal(1.0); // Zoom scale
+  
   motionStrength = signal(1.0);
   motionEnabled = signal(false);
   motionError = signal<string | null>(null);
@@ -244,11 +265,18 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   showWallpaperMenu = signal(false);
   toastMessage = signal<string | null>(null);
 
+  // Pointer Interaction State
+  activePointers: PointerEvent[] = [];
   isDragging = false;
+  isPinching = false;
+  
   startX = 0;
   startY = 0;
   initialPanX = 0;
   initialPanY = 0;
+  
+  initialPinchDist = 0;
+  initialScale = 1.0;
 
   private lastFrameTime = 0;
   
@@ -266,15 +294,16 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     const limY = this.limitY();
 
     // 3. HARD CLAMP: Ensure the total translation never exceeds the image overflow limits
-    // This prevents seeing the black background even if gyro tilts drastically
     const finalX = Math.max(-limX, Math.min(rawX, limX));
     const finalY = Math.max(-limY, Math.min(rawY, limY));
 
-    // 4. Calculate rotation (unchanged)
+    // 4. Rotation
     const rx = (this.gyroY() / 20) * -1; 
     const ry = (this.gyroX() / 20);
     
-    return `translate3d(${finalX}px, ${finalY}px, 0) rotateX(${rx}deg) rotateY(${ry}deg)`;
+    // 5. Apply Translation -> Rotation -> Scale
+    // Order matters: Translate then Rotate then Scale looks consistent for parallax.
+    return `translate3d(${finalX}px, ${finalY}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${this.imageScale()})`;
   });
 
   isMotionVisuallyActive = computed(() => this.motionEnabled() && this.motionStrength() > 0);
@@ -293,15 +322,17 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         this.motionEnabled.set(global.globalMotionEnabled);
       }
 
-      // Load View Settings (Fit, Pan)
+      // Load View Settings (Fit, Pan, Scale)
       if (p.viewSettings) {
           this.fitMode.set(p.viewSettings.fitMode);
           this.panX.set(p.viewSettings.panX);
           this.panY.set(p.viewSettings.panY);
+          this.imageScale.set(p.viewSettings.scale || 1.0);
       } else {
           this.fitMode.set('height');
           this.panX.set(0);
           this.panY.set(0);
+          this.imageScale.set(1.0);
       }
 
       if (this.motionEnabled()) {
@@ -311,10 +342,11 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       }
     });
 
-    // Reactively update boundaries when fitMode changes
+    // Reactively update boundaries when fitMode or scale changes
     effect(() => {
-        const mode = this.fitMode(); // Dependency
-        // Small timeout to allow DOM to reflow with new class
+        const mode = this.fitMode(); 
+        const s = this.imageScale();
+        // Small timeout to allow DOM to reflow if needed
         setTimeout(() => this.updateBoundaries(), 50);
     });
   }
@@ -339,14 +371,14 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       const img = this.imageElement()?.nativeElement;
       if (!img) return;
 
-      const imgW = img.offsetWidth;
-      const imgH = img.offsetHeight;
+      const scale = this.imageScale();
+      // Effective dimension is visually scaled
+      const imgW = img.offsetWidth * scale;
+      const imgH = img.offsetHeight * scale;
       const screenW = window.innerWidth;
       const screenH = window.innerHeight;
 
-      // Calculate the maximum amount we can move from the center before hitting the edge.
-      // If ImageWidth = 1200 and ScreenWidth = 1000, overflow is 200.
-      // We can move -100px (left) to +100px (right). So limit is 100.
+      // Calculate overflow
       const overflowX = Math.max(0, imgW - screenW);
       const overflowY = Math.max(0, imgH - screenH);
 
@@ -362,6 +394,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   resetSettings() { 
      this.panX.set(0); this.panY.set(0); 
      this.fitMode.set('height');
+     this.imageScale.set(1.0);
      const global = this.settingsService.settings();
      this.motionStrength.set(global.globalMotionStrength);
      this.motionEnabled.set(global.globalMotionEnabled);
@@ -377,20 +410,39 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         {
             fitMode: this.fitMode(),
             panX: this.panX(),
-            panY: this.panY()
+            panY: this.panY(),
+            scale: this.imageScale()
         }
     );
     this.closeSettings(); 
   }
 
-  setFitMode(mode: FitMode) { this.fitMode.set(mode); this.panX.set(0); this.panY.set(0); }
-  
+  setFitMode(mode: FitMode) { 
+      this.fitMode.set(mode); 
+      // Reset pan on fit change to prevent getting lost
+      this.panX.set(0); 
+      this.panY.set(0); 
+  }
+
   updateStrength(event: Event) { 
       const val = parseFloat((event.target as HTMLInputElement).value); 
       this.motionStrength.set(val); 
       if (!this.motionEnabled() && val > 0) {
           this.toggleMotion(); 
       }
+  }
+
+  updateScale(event: Event) {
+      const val = parseFloat((event.target as HTMLInputElement).value);
+      this.imageScale.set(val);
+      // Ensure clamp is re-run immediately in case we scaled down
+      this.updateBoundaries();
+      
+      // Clamp panX/panY to new boundaries immediately
+      const limX = this.limitX();
+      const limY = this.limitY();
+      this.panX.update(x => Math.max(-limX, Math.min(x, limX)));
+      this.panY.update(y => Math.max(-limY, Math.min(y, limY)));
   }
 
   openWallpaperMenu() {
@@ -411,7 +463,8 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
           motionStrength: this.motionStrength(),
           fitMode: this.fitMode(),
           panX: this.panX(),
-          panY: this.panY()
+          panY: this.panY(),
+          scale: this.imageScale()
       };
 
       try {
@@ -439,40 +492,110 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       }, 3000);
   }
   
-  startDrag(event: PointerEvent) {
+  // --- POINTER EVENTS (Drag & Pinch) ---
+
+  onPointerDown(event: PointerEvent) {
     if (this.isSettingsOpen()) return;
-    this.isDragging = true;
-    this.startX = event.clientX;
-    this.startY = event.clientY;
-    this.initialPanX = this.panX();
-    this.initialPanY = this.panY();
     
-    // Ensure boundaries are fresh
-    this.updateBoundaries();
-
+    this.activePointers.push(event);
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
+
+    if (this.activePointers.length === 1) {
+        // Start Drag
+        this.isDragging = true;
+        this.startX = event.clientX;
+        this.startY = event.clientY;
+        this.initialPanX = this.panX();
+        this.initialPanY = this.panY();
+        this.updateBoundaries();
+    } else if (this.activePointers.length === 2) {
+        // Start Pinch
+        this.isPinching = true;
+        this.isDragging = false; // Disable drag during pinch
+        this.initialPinchDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
+        this.initialScale = this.imageScale();
+    }
   }
 
-  onDrag(event: PointerEvent) {
-    if (!this.isDragging) return;
-    
-    let newX = this.initialPanX + (event.clientX - this.startX);
-    let newY = this.initialPanY + (event.clientY - this.startY);
-    
-    // Apply Boundary Clamping to Manual Pan as well
-    // Note: We clamp manual pan slightly differently than render clamp
-    // But logically, pan shouldn't exceed limits either.
-    const limX = this.limitX();
-    const limY = this.limitY();
+  onPointerMove(event: PointerEvent) {
+    // Update pointer record
+    const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
+    if (index !== -1) {
+        this.activePointers[index] = event;
+    }
 
-    newX = Math.max(-limX, Math.min(newX, limX));
-    newY = Math.max(-limY, Math.min(newY, limY));
+    if (this.isPinching && this.activePointers.length === 2) {
+        // Handle Pinch
+        const curDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
+        if (this.initialPinchDist > 0) {
+            const scaleFactor = curDist / this.initialPinchDist;
+            let newScale = this.initialScale * scaleFactor;
+            
+            // Clamp Scale (1.0 to 3.0)
+            newScale = Math.max(1.0, Math.min(newScale, 3.0));
+            this.imageScale.set(newScale);
+        }
+    } else if (this.isDragging && this.activePointers.length === 1) {
+        // Handle Drag
+        let newX = this.initialPanX + (event.clientX - this.startX);
+        let newY = this.initialPanY + (event.clientY - this.startY);
+        
+        const limX = this.limitX();
+        const limY = this.limitY();
 
-    this.panX.set(newX);
-    this.panY.set(newY);
+        newX = Math.max(-limX, Math.min(newX, limX));
+        newY = Math.max(-limY, Math.min(newY, limY));
+
+        this.panX.set(newX);
+        this.panY.set(newY);
+    }
   }
 
-  endDrag() { this.isDragging = false; }
+  onPointerUp(event: PointerEvent) {
+      // Remove pointer
+      const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
+      if (index !== -1) {
+          this.activePointers.splice(index, 1);
+      }
+      
+      if (this.activePointers.length < 2) {
+          this.isPinching = false;
+      }
+      if (this.activePointers.length === 0) {
+          this.isDragging = false;
+      }
+      // If we dropped from 2 to 1 finger, we could resume dragging, 
+      // but usually better to reset drag state to avoid jumps.
+      if (this.activePointers.length === 1) {
+          // Reset drag start reference to current position to avoid jump
+          this.startX = this.activePointers[0].clientX;
+          this.startY = this.activePointers[0].clientY;
+          this.initialPanX = this.panX();
+          this.initialPanY = this.panY();
+          this.isDragging = true;
+      }
+  }
+
+  getPinchDistance(p1: PointerEvent, p2: PointerEvent): number {
+      return Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+  }
+  
+  onWheel(event: WheelEvent) {
+      // Allow mouse wheel zoom for desktop testing
+      if (this.isSettingsOpen()) return;
+      event.preventDefault();
+      
+      const delta = -event.deltaY * 0.001;
+      let newScale = this.imageScale() + delta;
+      newScale = Math.max(1.0, Math.min(newScale, 3.0));
+      this.imageScale.set(newScale);
+      this.updateBoundaries();
+  }
+
+  endDrag() { 
+      // Handled by onPointerUp mostly, but kept for compatibility
+      if(this.activePointers.length === 0) this.isDragging = false; 
+  }
 
   async requestMotionPermission() {
     this.motionError.set(null);
@@ -499,7 +622,14 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   }
 
   private handleOrientation = (event: DeviceOrientationEvent) => {
+    // 1. Check if Motion is globally or locally enabled
     if (!this.motionEnabled()) return;
+
+    // 2. CHECK CENTRALIZED PAUSE LOGIC (Pause on Power Save)
+    // If we are effectively paused, we stop updating the Gyro values.
+    if (this.settingsService.isEffectivelyPaused()) {
+        return; 
+    }
 
     const now = performance.now();
     const targetFps = this.settingsService.settings().targetFps;

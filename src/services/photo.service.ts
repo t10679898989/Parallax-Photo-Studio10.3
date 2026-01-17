@@ -1,10 +1,12 @@
 
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
+import { SettingsService, AppSettings } from './settings.service';
 
 export interface ViewSettings {
   fitMode: 'height' | 'width';
   panX: number;
   panY: number;
+  scale: number; // New: Zoom level (1.0 to 3.0+)
 }
 
 export interface Photo {
@@ -33,6 +35,22 @@ export interface Playlist {
   sortOrder: SortOrder; 
 }
 
+// Backup Data Structure
+export interface BackupData {
+  version: number;
+  timestamp: number;
+  globalSettings: AppSettings;
+  playlists: Playlist[];
+  photos: {
+    id: string;
+    name: string;
+    size: number; // Used for fuzzy matching if ID changes
+    caption?: string;
+    motionSettings?: { strength: number; enabled: boolean };
+    viewSettings?: ViewSettings;
+  }[];
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -41,6 +59,8 @@ export class PhotoService {
   trash = signal<Photo[]>([]);
   playlists = signal<Playlist[]>([]);
   
+  settingsService = inject(SettingsService);
+
   // Navigation State
   activePhotoId = signal<string | null>(null);
   activePlaylistId = signal<string | null>(null); // Persist playlist navigation
@@ -216,5 +236,106 @@ export class PhotoService {
       this.playlists.update(playlists =>
         playlists.map(p => p.id === playlistId ? { ...p, ...changes } : p)
       );
+  }
+
+  // --- BACKUP & RESTORE SYSTEM ---
+
+  generateBackup(): string {
+    const backup: BackupData = {
+      version: 1,
+      timestamp: Date.now(),
+      globalSettings: this.settingsService.settings(),
+      playlists: this.playlists(),
+      // We only map necessary config, NOT the file blob
+      photos: this.photos().map(p => ({
+        id: p.id,
+        name: p.name,
+        size: p.file.size,
+        caption: p.caption,
+        motionSettings: p.motionSettings,
+        viewSettings: p.viewSettings
+      }))
+    };
+    return JSON.stringify(backup, null, 2);
+  }
+
+  restoreBackup(jsonString: string): { success: boolean; message: string; restoredCount: number } {
+    try {
+      const backup: BackupData = JSON.parse(jsonString);
+      
+      if (!backup.version || !backup.photos) {
+        return { success: false, message: 'Invalid backup file format.', restoredCount: 0 };
+      }
+
+      // 1. Restore Global Settings
+      if (backup.globalSettings) {
+        this.settingsService.updateSettings(backup.globalSettings);
+      }
+
+      // 2. Smart Match Photos (The Core Logic)
+      // We need to map [Backup ID] -> [Current Live ID] to fix playlists later
+      const idMapping = new Map<string, string>(); 
+      let matchCount = 0;
+
+      const updatedPhotos = this.photos().map(currentPhoto => {
+         // Strategy A: Exact ID Match
+         let match = backup.photos.find(bp => bp.id === currentPhoto.id);
+         
+         // Strategy B: Name + Size Match (Re-import scenario)
+         if (!match) {
+            match = backup.photos.find(bp => bp.name === currentPhoto.name && bp.size === currentPhoto.file.size);
+         }
+
+         if (match) {
+            matchCount++;
+            // Record mapping: BackupID -> CurrentID
+            idMapping.set(match.id, currentPhoto.id);
+
+            // Apply settings
+            return {
+               ...currentPhoto,
+               caption: match.caption || currentPhoto.caption,
+               motionSettings: match.motionSettings,
+               viewSettings: match.viewSettings
+            };
+         }
+
+         return currentPhoto;
+      });
+
+      // Update state
+      this.photos.set(updatedPhotos);
+
+      // 3. Restore Playlists
+      // We need to recreate playlists, but translate the IDs using our mapping
+      // If a photo in the backup isn't found in current app, it is removed from playlist.
+      if (backup.playlists) {
+          const restoredPlaylists = backup.playlists.map(bp => {
+              // Map old IDs to new IDs
+              const validPhotoIds = bp.photoIds
+                  .map(oldId => idMapping.get(oldId) || oldId) // Use new ID if mapped, else keep old (might match exactly)
+                  .filter(id => updatedPhotos.some(p => p.id === id)); // Only keep if exists in app
+
+              return {
+                  ...bp,
+                  photoIds: validPhotoIds
+              };
+          });
+          
+          // Merge logic: Overwrite existing playlists with same ID, add new ones
+          // Or just simple replace? Let's replace for a clean restore.
+          this.playlists.set(restoredPlaylists);
+      }
+
+      return { 
+          success: true, 
+          message: `Restore complete. Configured ${matchCount} photos and ${backup.playlists?.length || 0} playlists.`,
+          restoredCount: matchCount
+      };
+
+    } catch (e) {
+      console.error(e);
+      return { success: false, message: 'Failed to parse backup file.', restoredCount: 0 };
+    }
   }
 }

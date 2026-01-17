@@ -27,11 +27,16 @@ export class AppComponent {
     // 2. Bridge for Double Tap (Called by Android WallpaperService onTouchEvent)
     (window as any).handleDoubleTap = () => {
       const settings = this.settingsService.settings();
-      const isPowerSaveActive = this.settingsService.isSystemPowerSave();
-
-      // Logic: Ignore double tap if setting is off OR if (PauseOnPowerSave is On AND System is in Power Save)
+      
+      // Check Global Switch First
       if (!settings.doubleTapToChange) return;
-      if (settings.pauseOnPowerSave && isPowerSaveActive) return;
+
+      // Check Centralized Pause Logic (Pause on Power Save)
+      // If we are effectively paused, we IGNORE double taps.
+      if (this.settingsService.isEffectivelyPaused()) {
+          console.log('Double Tap Ignored: App is Paused due to Power Save');
+          return; 
+      }
 
       console.log('Double Tap Detected: Requesting Next Wallpaper');
       
