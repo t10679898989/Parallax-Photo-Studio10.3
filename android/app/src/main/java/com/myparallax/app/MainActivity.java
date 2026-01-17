@@ -1,11 +1,14 @@
-package com.myparallax.app; // ⚠️ 請確認這行跟 AndroidManifest.xml 裡的 package="..." 一模一樣
+package com.myparallax.app; // ⚠️ 再次確認這跟 AndroidManifest 是一樣的
 
+import android.app.WallpaperManager;
+import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent; // 新增
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.widget.Toast; // 用來顯示提示
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -14,11 +17,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 1. 取得 WebView
         WebView webView = this.getBridge().getWebView();
-        
-        // 2. 注入橋接介面
-        // 這行讓 Web 可以用 window.Android.saveSettings()
         webView.addJavascriptInterface(new WebAppInterface(this), "Android");
     }
 
@@ -32,30 +31,50 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void saveSettings(String jsonSettings) {
             SharedPreferences sharedPref = mContext.getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
-            SharedPreferences.Editor editor = sharedPref.edit();
-            editor.putString("settings_json", jsonSettings);
-            editor.apply();
-
-            // 🔥 新增：發送廣播通知 Service 更新設定 (解決調整參數沒反應的問題)
+            sharedPref.edit().putString("settings_json", jsonSettings).apply();
+            
+            // 發送廣播通知 Service 更新 (如果桌布已經在跑)
             sendUpdateBroadcast();
         }
         
         @JavascriptInterface
         public void setWallpaper(String imagePath) {
+             // 1. 先把圖片路徑存起來
              SharedPreferences sharedPref = mContext.getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
-             SharedPreferences.Editor editor = sharedPref.edit();
-             editor.putString("current_image_path", imagePath);
-             editor.apply();
+             sharedPref.edit().putString("current_image_path", imagePath).apply();
              
-             // 🔥 新增：發送廣播通知 Service 換圖 (解決 TODO)
+             // 2. 通知 Service (如果桌布已經設定了，這會讓畫面直接換圖)
              sendUpdateBroadcast();
+
+             // 3. 🔥【關鍵修正】呼叫系統桌布預覽視窗 🔥
+             // 我們要檢查使用者是否已經在使用我們的桌布，如果沒有，就彈出設定視窗
+             runOnUiThread(() -> {
+                 try {
+                     WallpaperManager wm = WallpaperManager.getInstance(mContext);
+                     // 檢查目前桌布是否已經是我們的 App
+                     if (wm.getWallpaperInfo() == null || 
+                         !wm.getWallpaperInfo().getPackageName().equals(mContext.getPackageName())) {
+                         
+                         Toast.makeText(mContext, "請點擊「設定桌布」以套用效果", Toast.LENGTH_LONG).show();
+                         
+                         // 啟動 Android 原生桌布選擇器，並直接指向我們的 Service
+                         Intent intent = new Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER);
+                         intent.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                             new ComponentName(mContext, ParallaxWallpaperService.class));
+                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                         mContext.startActivity(intent);
+                     } else {
+                         Toast.makeText(mContext, "桌布已更新", Toast.LENGTH_SHORT).show();
+                     }
+                 } catch (Exception e) {
+                     e.printStackTrace();
+                     Toast.makeText(mContext, "無法開啟桌布設定: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                 }
+             });
         }
 
-        // 輔助方法：發送廣播
         private void sendUpdateBroadcast() {
-            // 這個字串必須跟 Service 裡的 IntentFilter 一致
             Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
-            // 指定 Package 確保只有自己的 App 收得到
             intent.setPackage(mContext.getPackageName());
             mContext.sendBroadcast(intent);
         }

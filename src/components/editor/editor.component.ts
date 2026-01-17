@@ -92,9 +92,9 @@ type FitMode = 'height' | 'width';
         
         <div class="grid grid-cols-1 gap-6 max-w-md mx-auto w-full pb-6">
            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-bold text-white">編輯器設定 (Editor)</h3>
+              <h3 class="text-lg font-bold text-white">Editor Settings</h3>
               <button (click)="togglePreview()" class="text-sm text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1">
-                預覽 (Preview)
+                Preview
               </button>
            </div>
 
@@ -102,8 +102,8 @@ type FitMode = 'height' | 'width';
            <div class="space-y-3">
              <div class="flex justify-between items-center">
                <label class="text-sm font-medium text-slate-300">
-                  動態強度 (Motion Strength)
-                  @if (!motionEnabled()) { <span class="text-slate-500 ml-2 text-xs">(已停用)</span> }
+                  Motion Strength
+                  @if (!motionEnabled()) { <span class="text-slate-500 ml-2 text-xs">(Disabled)</span> }
                </label>
                <span 
                  class="text-xs font-mono transition-colors"
@@ -140,7 +140,7 @@ type FitMode = 'height' | 'width';
            <!-- Fit Mode & Zoom -->
            <div class="space-y-3">
              <div class="flex justify-between items-center">
-                <label class="text-sm font-medium text-slate-300">圖片適應 (Fit)</label>
+                <label class="text-sm font-medium text-slate-300">Image Fit</label>
                 <span class="text-xs text-emerald-400 font-mono">Zoom: {{ ((imageScale() - 1) * 100).toFixed(0) }}%</span>
              </div>
              
@@ -153,7 +153,7 @@ type FitMode = 'height' | 'width';
                  [class.text-slate-400]="fitMode() !== 'height'"
                  (click)="setFitMode('height')"
                >
-                 垂直適應
+                 Vertical
                </button>
                <button 
                  class="px-3 py-2 rounded-md text-sm font-medium transition-all"
@@ -162,7 +162,7 @@ type FitMode = 'height' | 'width';
                  [class.text-slate-400]="fitMode() !== 'width'"
                  (click)="setFitMode('width')"
                >
-                 水平適應
+                 Horizontal
                </button>
              </div>
 
@@ -181,8 +181,8 @@ type FitMode = 'height' | 'width';
 
            <!-- Actions -->
            <div class="flex gap-4 pt-2 border-t border-white/10 mt-2">
-             <button (click)="resetSettings()" class="flex-1 py-3 text-slate-400 font-medium hover:text-white transition-colors">重置</button>
-             <button (click)="saveSettings()" class="flex-[2] bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors py-3 shadow-lg active:scale-95">儲存設定</button>
+             <button (click)="resetSettings()" class="flex-1 py-3 text-slate-400 font-medium hover:text-white transition-colors">Reset</button>
+             <button (click)="saveSettings()" class="flex-[2] bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors py-3 shadow-lg active:scale-95">Save</button>
            </div>
         </div>
       </div>
@@ -453,73 +453,33 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.showWallpaperMenu.set(false);
   }
 
-  // --- HELPER: Convert URL to Base64 ---
-  // This is critical for the Android Bridge to receive the actual image data.
-  // Blob URLs (blob:http://...) are NOT accessible by the Native Android process.
-  private async urlToBase64(url: string): Promise<string> {
-      try {
-          const response = await fetch(url);
-          const blob = await response.blob();
-          return new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                  resolve(reader.result as string);
-              };
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-          });
-      } catch (e) {
-          console.error("Failed to convert image to base64", e);
-          return "";
-      }
-  }
-
-  async applyWallpaper(type: 'home' | 'lock' | 'both') {
+  applyWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
-      this.toastMessage.set('準備圖片中，請稍候...');
       
-      // 1. Convert Image to Base64 (Heavy operation, do it before creating config)
-      const base64Data = await this.urlToBase64(this.photo().url);
-      
-      if (!base64Data) {
-          this.toastMessage.set('圖片處理失敗');
-          return;
-      }
-
       const config = {
           photoId: this.photo().id,
-          // photoUrl: this.photo().url, // Removed Blob URL, useless for Android Native
-          imageBase64: base64Data, // ADDED: Send actual data
+          photoUrl: this.photo().url,
           motionEnabled: this.motionEnabled(),
           motionStrength: this.motionStrength(),
           fitMode: this.fitMode(),
           panX: this.panX(),
           panY: this.panY(),
-          scale: this.imageScale(),
-          mode: 'single', // Explicit mode
-          target: type
+          scale: this.imageScale()
       };
 
       try {
-          // 2. Save to Local Storage (Backup only)
-          // Note: LocalStorage has a size limit (usually 5MB). Saving Base64 here might fail if image is large.
-          // We try-catch specifically for LS to not block the Bridge call.
-          try {
-              const jsonString = JSON.stringify({ ...config, imageBase64: '[TRUNCATED_FOR_LOG]' });
-              localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonString);
-          } catch(e) {
-              console.warn('LocalStorage full or error, skipping backup save', e);
-          }
+          // 1. Save to Local Storage
+          const jsonString = JSON.stringify(config);
+          localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonString);
+          localStorage.setItem('LIVE_WALLPAPER_TIMESTAMP', Date.now().toString());
+          console.log('Wallpaper Configuration Saved:', config);
 
-          const fullJsonString = JSON.stringify(config);
-
-          // 3. Call Native Bridge (APK Ready)
+          // 2. Call Native Bridge (APK Ready)
           if ((window as any).Android && (window as any).Android.setWallpaper) {
-              (window as any).Android.setWallpaper(fullJsonString);
+              (window as any).Android.setWallpaper(jsonString);
               this.toastMessage.set('已發送設定至 Android 系統');
           } else {
-             this.toastMessage.set('錯誤: 未偵測到 Android Bridge');
-             console.log('Mock Bridge Call:', config);
+             this.toastMessage.set('已儲存設定 (Bridge Inactive)');
           }
 
       } catch (e) {
@@ -561,7 +521,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     // Update pointer record
     const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
     if (index !== -1) {
-        this.activePointers.splice(index, 1);
+        this.activePointers[index] = event;
     }
 
     if (this.isPinching && this.activePointers.length === 2) {
