@@ -456,7 +456,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     });
   }
 
-  // 🔥 修正後的 applyWallpaper (最強相容版：支援 URL 下載)
+  // 🔥 修正後的 applyWallpaper (最強相容版：支援 URL 下載 + 修正順序)
   async applyWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       
@@ -464,59 +464,63 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.toastMessage.set('處理中...');
 
       try {
-          // 1. 儲存設定 (備份)
+          // 1. 準備設定檔 (加入 targetFps)
           const config = {
               photoId: currentPhoto.id,
               motionEnabled: this.motionEnabled(),
               motionStrength: this.motionStrength(),
               scale: this.imageScale(),
-              panX: this.panX(),
-              panY: this.panY()
+              panX: this.panX(), // 用戶在 App 裡拖曳的位置
+              panY: this.panY(),
+              targetFps: this.settingsService.settings().targetFps // 確保 FPS 設定也傳過去
           };
-          localStorage.setItem('LIVE_WALLPAPER_CONFIG', JSON.stringify(config));
-
-          // 2. 準備圖片資料 (Data)
-          let base64Data: string;
+          const jsonConfig = JSON.stringify(config);
           
-          // 嘗試取得路徑 (使用 as any 避開 TS 檢查)
+          // 備份到 Web LocalStorage
+          localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonConfig);
+
+          // 2. 準備圖片 (Path 或 Base64)
+          let base64Data: string;
+          // 使用 as any 避開 TS 檢查
           const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
 
           if (sourcePath) {
-             // 情況 A: 有實體路徑 (通常是原生相簿選的)
-             console.log('使用實體路徑讀取:', sourcePath);
+             console.log('使用實體路徑:', sourcePath);
              const file = await Filesystem.readFile({ path: sourcePath });
              base64Data = file.data as string;
           } else if (currentPhoto.url) {
-             // 情況 B: 只有 URL (例如網頁匯入的 blob:...) -> 我們自己去抓下來！
-             console.log('找不到路徑，改為讀取 URL:', currentPhoto.url);
+             console.log('下載 URL:', currentPhoto.url);
              const response = await fetch(currentPhoto.url);
              const blob = await response.blob();
              base64Data = await this.blobToBase64(blob);
           } else {
-             throw new Error('無法讀取照片資料 (無 Path 也無 URL)');
+             throw new Error('無法讀取照片 (無 Path 也無 URL)');
           }
 
-          // 3. 寫入到 App 私有資料夾 (Directory.Data)
+          // 3. 寫入圖片檔案
           const fileName = 'current_wallpaper.jpg';
           const savedFile = await Filesystem.writeFile({
             path: fileName,
-            data: base64Data, // 這裡傳入準備好的 Base64
+            data: base64Data,
             directory: Directory.Data,
             recursive: true
           });
-
-          // 4. 取得 Native 路徑並呼叫 Java
           const nativePath = savedFile.uri.replace('file://', '');
-          console.log('圖片準備完成:', nativePath);
 
-          if ((window as any).Android && (window as any).Android.setWallpaper) {
-              (window as any).Android.setWallpaper(nativePath);
+          // 4. 🔥 關鍵順序修正：先傳送設定，再設定桌布 🔥
+          if ((window as any).Android) {
               
+              // (A) 先更新設定值 (縮放、位移)
               if ((window as any).Android.updateSettings) {
-                 (window as any).Android.updateSettings(JSON.stringify(config));
+                 console.log('傳送設定給 Android:', jsonConfig);
+                 (window as any).Android.updateSettings(jsonConfig);
               }
 
-              this.toastMessage.set('已發送設定至 Android 系統');
+              // (B) 再通知 Android 換圖 (這會觸發 Service 重讀設定)
+              if ((window as any).Android.setWallpaper) {
+                  (window as any).Android.setWallpaper(nativePath);
+                  this.toastMessage.set('已發送設定至 Android 系統');
+              }
           } else {
              this.toastMessage.set('已儲存 (Bridge Inactive)');
           }
