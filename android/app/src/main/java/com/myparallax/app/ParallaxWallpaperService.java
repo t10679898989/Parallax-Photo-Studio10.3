@@ -1,4 +1,4 @@
-package com.myparallax.app; // ⚠️ 確認 package 名稱是否正確
+package com.myparallax.app; // ⚠️ 請確認這行跟你的 AndroidManifest package 一樣
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -38,47 +38,50 @@ public class ParallaxWallpaperService extends WallpaperService {
 
     private class ParallaxEngine extends Engine implements SensorEventListener {
         
-        // 核心元件
+        // --- 核心變數 ---
         private final Handler handler = new Handler();
         private SensorManager sensorManager;
         private Sensor accelerometer;
         private GestureDetector gestureDetector;
         private SharedPreferences prefs;
 
-        // 狀態變數
+        // --- 狀態控制 ---
         private boolean visible = false;
         private boolean isPowerSaveMode = false;
         
-        // 設定值 (從 JSON 讀取)
+        // --- 用戶設定 (從 JSON 讀取) ---
         private Bitmap currentBitmap;
-        private float scale = 1.2f; // 預設放大一點，才有空間移動
-        private float manualPanX = 0; // 手動位移 (從編輯器來的)
-        private float manualPanY = 0;
+        private float userScale = 1.0f; // 用戶在 App 裡設定的縮放 (1.0 ~ 3.0)
+        private float manualPanX = 0;   // 用戶手動拖曳的 X
+        private float manualPanY = 0;   // 用戶手動拖曳的 Y
         private float motionStrength = 1.0f;
         private int targetFps = 60; 
         private boolean runInBackground = false;
         private boolean pauseOnPowerSave = true;
+        
+        // --- 螢幕尺寸 ---
+        private int screenWidth = 0;
+        private int screenHeight = 0;
 
-        // 🔥 平滑運算變數 (解決不絲滑問題)
+        // --- 平滑運算 (Smoothing / Lerp) ---
         private float targetGyroX = 0;
         private float targetGyroY = 0;
         private float currentGyroX = 0;
         private float currentGyroY = 0;
-        // 平滑係數 (0.01 ~ 1.0)，越小越滑但反應越慢，0.1 是一個不錯的平衡點
+        // 平滑係數：數值越小越滑順但反應越慢，0.1f 是最佳平衡點
         private final float SMOOTHING_FACTOR = 0.1f; 
 
-        private int screenWidth, screenHeight;
-
-        // 接收 MainActivity 傳來的「更新訊號」
+        // --- 廣播接收器 (接收 App 設定更新) ---
         private final BroadcastReceiver updateReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if ("com.myparallax.app.ACTION_UPDATE_WALLPAPER".equals(intent.getAction())) {
-                    loadSettings(); 
+                    loadSettings(); // 收到訊號，立刻重讀設定
                 }
             }
         };
 
+        // --- 廣播接收器 (省電模式監聽) ---
         private final BroadcastReceiver powerSaveReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -90,6 +93,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
         };
 
+        // --- 繪圖迴圈 ---
         private final Runnable drawRunner = new Runnable() {
             @Override
             public void run() {
@@ -101,20 +105,21 @@ public class ParallaxWallpaperService extends WallpaperService {
         public void onCreate(SurfaceHolder surfaceHolder) {
             super.onCreate(surfaceHolder);
 
+            // 1. 初始化系統服務
             sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             prefs = getSharedPreferences("WallpaperPrefs", MODE_PRIVATE);
 
-            // 雙擊偵測 (預留功能)
+            // 2. 初始化手勢 (預留雙擊功能)
             gestureDetector = new GestureDetector(getApplicationContext(), new GestureDetector.SimpleOnGestureListener() {
                 @Override
                 public boolean onDoubleTap(MotionEvent e) {
-                    // TODO: 這裡可以實作雙擊換圖
+                    // 未來可在這裡加入換圖邏輯
                     return true;
                 }
             });
 
-            // 註冊廣播
+            // 3. 註冊廣播
             IntentFilter filter = new IntentFilter();
             filter.addAction("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
             filter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
@@ -126,7 +131,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
             registerReceiver(powerSaveReceiver, new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
 
-            // 初始載入
+            // 4. 載入初始設定
             loadSettings();
         }
 
@@ -140,6 +145,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             handler.removeCallbacks(drawRunner);
         }
 
+        // 讀取 SharedPrefs 與 JSON 設定
         private void loadSettings() {
             String jsonStr = prefs.getString("settings_json", "{}");
             String imagePath = prefs.getString("current_image_path", ""); 
@@ -147,44 +153,69 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 JSONObject json = new JSONObject(jsonStr);
                 
-                if (json.has("scale")) scale = (float) json.getDouble("scale");
+                // 讀取數值 (加入防呆預設值)
+                if (json.has("scale")) userScale = (float) json.getDouble("scale");
                 if (json.has("motionStrength")) motionStrength = (float) json.getDouble("motionStrength");
                 if (json.has("panX")) manualPanX = (float) json.getDouble("panX");
                 if (json.has("panY")) manualPanY = (float) json.getDouble("panY");
-                if (json.has("targetFps")) targetFps = json.getInt("targetFps");
-                
+                if (json.has("targetFps")) targetFps = json.optInt("targetFps", 60);
+                if (json.has("runInBackground")) runInBackground = json.optBoolean("runInBackground", false);
+                if (json.has("pauseOnPowerSave")) pauseOnPowerSave = json.optBoolean("pauseOnPowerSave", true);
+
                 // 讀取圖片
                 if (!imagePath.isEmpty()) {
                     File imgFile = new File(imagePath);
                     if (imgFile.exists()) {
-                        // 釋放舊的記憶體
+                        // 釋放舊圖記憶體
                         if (currentBitmap != null && !currentBitmap.isRecycled()) {
                             currentBitmap.recycle();
                         }
+                        // 載入新圖
                         currentBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
                     }
                 }
 
-                // 重置位置，避免切換圖片時跳動
+                // 重置陀螺儀位置，避免換圖時畫面跳動
                 targetGyroX = 0; targetGyroY = 0;
                 currentGyroX = 0; currentGyroY = 0;
 
+                // 處理前台服務通知
                 handleForegroundService();
                 
+                // 立即重繪
+                if (visible) draw();
+
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
 
         private void handleForegroundService() {
-            // (保持原本的前台服務邏輯不變)
+            if (runInBackground) {
+                String CHANNEL_ID = "wallpaper_service_channel";
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Wallpaper Service", NotificationManager.IMPORTANCE_LOW);
+                    getSystemService(NotificationManager.class).createNotificationChannel(channel);
+                }
+                Notification notification = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID)
+                        .setContentTitle("Parallax Wallpaper")
+                        .setContentText("Running in background")
+                        .setSmallIcon(android.R.drawable.ic_menu_gallery) 
+                        .setPriority(NotificationCompat.PRIORITY_LOW)
+                        .build();
+                try {
+                    startForeground(1, notification);
+                } catch (Exception e) {}
+            } else {
+                stopForeground(true);
+            }
         }
 
         @Override
         public void onVisibilityChanged(boolean visible) {
             this.visible = visible;
             if (visible) {
-                loadSettings(); // 每次顯示都重讀設定 (解決預覽黑畫面)
+                loadSettings(); // 每次顯示都確保設定是最新的
                 updateSensorState();
             } else {
                 updateSensorState();
@@ -212,8 +243,8 @@ public class ParallaxWallpaperService extends WallpaperService {
         @Override
         public void onSensorChanged(SensorEvent event) {
             if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-                // 這裡只更新「目標值」，不直接更新「現在值」
-                // 負號是為了讓移動方向跟手指滑動感覺一致 (Parallax 效果)
+                // 讀取加速規數值
+                // 負號是為了校正方向，讓背景移動符合視差邏輯 (手機往左傾，背景往右移)
                 targetGyroX = -event.values[0]; 
                 targetGyroY = event.values[1];
             }
@@ -227,6 +258,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             draw();
         }
 
+        // 🔥🔥🔥 核心繪圖邏輯 (WYSIWYG 修正版) 🔥🔥🔥
         private void draw() {
             SurfaceHolder holder = getSurfaceHolder();
             Canvas canvas = null;
@@ -234,58 +266,71 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 canvas = holder.lockCanvas();
                 if (canvas != null) {
-                    if (currentBitmap == null) {
-                        loadSettings(); // 最後防線
+                    // 安全檢查：沒圖就重讀，還是沒圖就畫黑底
+                    if (currentBitmap == null || currentBitmap.isRecycled()) {
+                        loadSettings();
                     }
                     if (currentBitmap == null) {
                         canvas.drawColor(Color.BLACK);
                         return;
                     }
+                    if (screenWidth == 0 || screenHeight == 0) return;
 
-                    // 1. 🔥 平滑運算 (Lerp) - 解決不絲滑問題
-                    // 公式：現在位置 += (目標位置 - 現在位置) * 平滑係數
+                    // --- 步驟 1: 計算基礎填滿 (Base Scale / Aspect Fill) ---
+                    // 找出能讓圖片「剛好完全覆蓋螢幕」的最小縮放比例
+                    // 這是為了達到 CSS object-fit: cover 的效果
+                    float widthRatio = (float) screenWidth / currentBitmap.getWidth();
+                    float heightRatio = (float) screenHeight / currentBitmap.getHeight();
+                    float baseScale = Math.max(widthRatio, heightRatio);
+
+                    // --- 步驟 2: 計算總縮放 (Total Scale) ---
+                    // 總縮放 = 基礎填滿 * 用戶設定的放大倍率
+                    float totalScale = baseScale * this.userScale;
+
+                    // --- 步驟 3: 計算在該縮放下的圖片實際尺寸 ---
+                    float scaledImageWidth = currentBitmap.getWidth() * totalScale;
+                    float scaledImageHeight = currentBitmap.getHeight() * totalScale;
+
+                    // --- 步驟 4: 計算安全邊界 (Max Clamp Limit) ---
+                    // 計算圖片比螢幕多出來的寬高的一半
+                    // 這是我們允許移動的最大極限，超過這裡就會露出黑底
+                    float maxDx = (scaledImageWidth - screenWidth) / 2f;
+                    float maxDy = (scaledImageHeight - screenHeight) / 2f;
+
+                    // --- 步驟 5: 平滑運算 (Lerp) ---
+                    // 讓數值慢慢接近目標，消除抖動
                     currentGyroX += (targetGyroX - currentGyroX) * SMOOTHING_FACTOR;
                     currentGyroY += (targetGyroY - currentGyroY) * SMOOTHING_FACTOR;
 
-                    // 清空畫布
-                    canvas.drawColor(Color.BLACK);
+                    // --- 步驟 6: 計算總位移 (Total Offset) ---
+                    // 總位移 = (手動平移 * 基礎縮放) + (陀螺儀 * 強度 * 30)
+                    // manualPan 乘上 baseScale 是為了讓 App 端的像素單位跟這裡對齊
+                    float totalOffsetX = (manualPanX * baseScale) + (currentGyroX * 30f * motionStrength);
+                    float totalOffsetY = (manualPanY * baseScale) + (currentGyroY * 30f * motionStrength);
 
-                    // 2. 計算基礎位移 (陀螺儀 + 手動調整)
-                    // baseRange = 30f 是一個經驗值，控制移動幅度
-                    float offsetX = (currentGyroX * 30f * motionStrength) + manualPanX;
-                    float offsetY = (currentGyroY * 30f * motionStrength) + manualPanY;
+                    // --- 步驟 7: 絕對邊界限制 (Hard Clamp) ---
+                    // 將位移強制鎖死在 [-max, +max] 之間
+                    float finalOffsetX = Math.max(-maxDx, Math.min(totalOffsetX, maxDx));
+                    float finalOffsetY = Math.max(-maxDy, Math.min(totalOffsetY, maxDy));
 
-                    // 3. 🔥 邊界檢查 (Clamping) - 解決黑框問題
-                    // 計算圖片放大後，比螢幕多出來的空間 (溢出量)
-                    float scaledImageWidth = currentBitmap.getWidth() * scale;
-                    float scaledImageHeight = currentBitmap.getHeight() * scale;
-                    
-                    // X 和 Y 軸允許的最大移動距離 (超過這個距離就會露出黑底)
-                    // 除以 2 是因為這些空間是分佈在圖片的左右/上下兩邊
-                    float maxOffsetX = Math.max(0, (scaledImageWidth - screenWidth) / 2f);
-                    float maxOffsetY = Math.max(0, (scaledImageHeight - screenHeight) / 2f);
+                    // --- 步驟 8: 繪製 ---
+                    canvas.drawColor(Color.BLACK); // 清底
 
-                    // 強制把位移限制在 [-max, +max] 之間
-                    offsetX = Math.max(-maxOffsetX, Math.min(offsetX, maxOffsetX));
-                    offsetY = Math.max(-maxOffsetY, Math.min(offsetY, maxOffsetY));
-
-                    // 4. 建立矩陣並繪圖
                     Matrix matrix = new Matrix();
-                    float centerX = (float) screenWidth / 2;
-                    float centerY = (float) screenHeight / 2;
                     
-                    // 將圖片移動到螢幕中心
-                    float imageCenterX = (screenWidth - currentBitmap.getWidth()) / 2f;
-                    float imageCenterY = (screenHeight - currentBitmap.getHeight()) / 2f;
+                    // A. 將圖片中心移到 (0,0)
+                    matrix.postTranslate(-currentBitmap.getWidth() / 2f, -currentBitmap.getHeight() / 2f);
                     
-                    // 縮放 (以螢幕中心為軸心)
-                    matrix.postScale(scale, scale, centerX, centerY);
+                    // B. 執行縮放
+                    matrix.postScale(totalScale, totalScale);
                     
-                    // 移動 (加上限制過的偏移量)
-                    matrix.postTranslate(imageCenterX + offsetX, imageCenterY + offsetY);
+                    // C. 移回螢幕中心 + 加上最終位移
+                    matrix.postTranslate((screenWidth / 2f) + finalOffsetX, (screenHeight / 2f) + finalOffsetY);
 
                     canvas.drawBitmap(currentBitmap, matrix, null);
                 }
+            } catch (Exception e) {
+                e.printStackTrace();
             } finally {
                 if (canvas != null) holder.unlockCanvasAndPost(canvas);
             }
