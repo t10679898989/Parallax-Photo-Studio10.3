@@ -1,4 +1,4 @@
-package com.myparallax.app; // ⚠️ 請確認這行跟你的 AndroidManifest package 一樣
+package com.myparallax.app;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -25,9 +25,12 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import androidx.core.app.NotificationCompat;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ParallaxWallpaperService extends WallpaperService {
 
@@ -38,50 +41,53 @@ public class ParallaxWallpaperService extends WallpaperService {
 
     private class ParallaxEngine extends Engine implements SensorEventListener {
         
-        // --- 核心變數 ---
+        // --- 核心元件 ---
         private final Handler handler = new Handler();
+        private final Handler playlistHandler = new Handler(); // 專門負責輪播計時
         private SensorManager sensorManager;
         private Sensor accelerometer;
         private GestureDetector gestureDetector;
         private SharedPreferences prefs;
 
-        // --- 狀態控制 ---
+        // --- 狀態 ---
         private boolean visible = false;
         private boolean isPowerSaveMode = false;
         
-        // --- 用戶設定 (從 JSON 讀取) ---
+        // --- 設定 (單張模式) ---
         private Bitmap currentBitmap;
-        private float userScale = 1.0f; // 用戶在 App 裡設定的縮放 (1.0 ~ 3.0)
-        private float manualPanX = 0;   // 用戶手動拖曳的 X
-        private float manualPanY = 0;   // 用戶手動拖曳的 Y
+        private float userScale = 1.0f;
+        private float manualPanX = 0;
+        private float manualPanY = 0;
+        
+        // --- 設定 (播放清單模式) ---
+        private boolean isPlaylistMode = false;
+        private List<String> playlistPaths = new ArrayList<>();
+        private int playlistInterval = 60; // 秒
+        private int currentPlaylistIndex = 0;
+        
+        // --- 通用設定 ---
         private float motionStrength = 1.0f;
         private int targetFps = 60; 
         private boolean runInBackground = false;
         private boolean pauseOnPowerSave = true;
-        
-        // --- 螢幕尺寸 ---
-        private int screenWidth = 0;
-        private int screenHeight = 0;
+        private boolean doubleTapToChange = false;
 
-        // --- 平滑運算 (Smoothing / Lerp) ---
-        private float targetGyroX = 0;
-        private float targetGyroY = 0;
-        private float currentGyroX = 0;
-        private float currentGyroY = 0;
-        // 平滑係數：數值越小越滑順但反應越慢，0.1f 是最佳平衡點
+        // --- 平滑運算 ---
+        private int screenWidth = 0, screenHeight = 0;
+        private float targetGyroX = 0, targetGyroY = 0;
+        private float currentGyroX = 0, currentGyroY = 0;
         private final float SMOOTHING_FACTOR = 0.1f; 
 
-        // --- 廣播接收器 (接收 App 設定更新) ---
+        // --- 廣播 ---
         private final BroadcastReceiver updateReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if ("com.myparallax.app.ACTION_UPDATE_WALLPAPER".equals(intent.getAction())) {
-                    loadSettings(); // 收到訊號，立刻重讀設定
+                    loadSettings();
                 }
             }
         };
 
-        // --- 廣播接收器 (省電模式監聽) ---
         private final BroadcastReceiver powerSaveReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -101,25 +107,43 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
         };
 
+        // --- 🔥 輪播計時任務 ---
+        private final Runnable playlistRunner = new Runnable() {
+            @Override
+            public void run() {
+                if (visible && isPlaylistMode && playlistPaths.size() > 1) {
+                    loadNextImage();
+                    // 設定下一次切換
+                    playlistHandler.postDelayed(this, playlistInterval * 1000L);
+                }
+            }
+        };
+
         @Override
         public void onCreate(SurfaceHolder surfaceHolder) {
             super.onCreate(surfaceHolder);
 
-            // 1. 初始化系統服務
             sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
             prefs = getSharedPreferences("WallpaperPrefs", MODE_PRIVATE);
 
-            // 2. 初始化手勢 (預留雙擊功能)
+            // 雙擊偵測
             gestureDetector = new GestureDetector(getApplicationContext(), new GestureDetector.SimpleOnGestureListener() {
                 @Override
                 public boolean onDoubleTap(MotionEvent e) {
-                    // 未來可在這裡加入換圖邏輯
-                    return true;
+                    if (doubleTapToChange && isPlaylistMode && playlistPaths.size() > 1) {
+                        // 1. 切換下一張
+                        loadNextImage();
+                        
+                        // 2. 重置計時器 (避免剛手動切換完，下一秒自動切換又來)
+                        playlistHandler.removeCallbacks(playlistRunner);
+                        playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                        return true;
+                    }
+                    return super.onDoubleTap(e);
                 }
             });
 
-            // 3. 註冊廣播
             IntentFilter filter = new IntentFilter();
             filter.addAction("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
             filter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
@@ -131,7 +155,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
             registerReceiver(powerSaveReceiver, new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
 
-            // 4. 載入初始設定
             loadSettings();
         }
 
@@ -143,17 +166,17 @@ public class ParallaxWallpaperService extends WallpaperService {
                 unregisterReceiver(powerSaveReceiver);
             } catch (Exception e) {}
             handler.removeCallbacks(drawRunner);
+            playlistHandler.removeCallbacks(playlistRunner);
         }
 
-        // 讀取 SharedPrefs 與 JSON 設定
         private void loadSettings() {
             String jsonStr = prefs.getString("settings_json", "{}");
-            String imagePath = prefs.getString("current_image_path", ""); 
+            String singleImagePath = prefs.getString("current_image_path", ""); 
 
             try {
                 JSONObject json = new JSONObject(jsonStr);
                 
-                // 讀取數值 (加入防呆預設值)
+                // 基礎設定
                 if (json.has("scale")) userScale = (float) json.getDouble("scale");
                 if (json.has("motionStrength")) motionStrength = (float) json.getDouble("motionStrength");
                 if (json.has("panX")) manualPanX = (float) json.getDouble("panX");
@@ -161,30 +184,89 @@ public class ParallaxWallpaperService extends WallpaperService {
                 if (json.has("targetFps")) targetFps = json.optInt("targetFps", 60);
                 if (json.has("runInBackground")) runInBackground = json.optBoolean("runInBackground", false);
                 if (json.has("pauseOnPowerSave")) pauseOnPowerSave = json.optBoolean("pauseOnPowerSave", true);
+                if (json.has("doubleTapToChange")) doubleTapToChange = json.optBoolean("doubleTapToChange", false);
 
-                // 讀取圖片
-                if (!imagePath.isEmpty()) {
-                    File imgFile = new File(imagePath);
-                    if (imgFile.exists()) {
-                        // 釋放舊圖記憶體
-                        if (currentBitmap != null && !currentBitmap.isRecycled()) {
-                            currentBitmap.recycle();
+                // 判斷模式
+                String mode = json.optString("mode", "single");
+                isPlaylistMode = "playlist".equals(mode);
+
+                if (isPlaylistMode) {
+                    // --- 播放清單模式 ---
+                    playlistInterval = json.optInt("interval", 60);
+                    // 最小間隔 5 秒，避免太快當機
+                    if (playlistInterval < 5) playlistInterval = 5;
+
+                    playlistPaths.clear();
+                    JSONArray paths = json.optJSONArray("playlist");
+                    if (paths != null) {
+                        for (int i = 0; i < paths.length(); i++) {
+                            playlistPaths.add(paths.getString(i));
                         }
-                        // 載入新圖
-                        currentBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+                    }
+                    
+                    // 如果目前沒有圖片，載入第一張
+                    if (currentBitmap == null && !playlistPaths.isEmpty()) {
+                        currentPlaylistIndex = 0;
+                        loadImage(playlistPaths.get(0));
+                    }
+                    
+                    // 重啟計時器 (如果可見)
+                    if (visible) {
+                        playlistHandler.removeCallbacks(playlistRunner);
+                        playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                    }
+
+                } else {
+                    // --- 單張模式 ---
+                    playlistHandler.removeCallbacks(playlistRunner); // 停止輪播
+                    if (!singleImagePath.isEmpty()) {
+                        loadImage(singleImagePath);
                     }
                 }
 
-                // 重置陀螺儀位置，避免換圖時畫面跳動
+                // 重置陀螺儀位置，避免切換模式時畫面跳動
                 targetGyroX = 0; targetGyroY = 0;
                 currentGyroX = 0; currentGyroY = 0;
-
-                // 處理前台服務通知
+                
                 handleForegroundService();
                 
-                // 立即重繪
                 if (visible) draw();
 
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // 🔥 切換下一張圖片
+        private void loadNextImage() {
+            if (playlistPaths.isEmpty()) return;
+            
+            currentPlaylistIndex++;
+            if (currentPlaylistIndex >= playlistPaths.size()) {
+                currentPlaylistIndex = 0;
+            }
+            
+            String nextPath = playlistPaths.get(currentPlaylistIndex);
+            loadImage(nextPath);
+            
+            // 重置陀螺儀位置，讓切換時平順一點
+            targetGyroX = 0; targetGyroY = 0;
+            currentGyroX = 0; currentGyroY = 0;
+        }
+
+        private void loadImage(String path) {
+            try {
+                File imgFile = new File(path);
+                if (imgFile.exists()) {
+                    Bitmap newBitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+                    if (newBitmap != null) {
+                        // 釋放舊圖
+                        if (currentBitmap != null && !currentBitmap.isRecycled()) {
+                            currentBitmap.recycle();
+                        }
+                        currentBitmap = newBitmap;
+                    }
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -215,10 +297,19 @@ public class ParallaxWallpaperService extends WallpaperService {
         public void onVisibilityChanged(boolean visible) {
             this.visible = visible;
             if (visible) {
-                loadSettings(); // 每次顯示都確保設定是最新的
+                loadSettings(); 
                 updateSensorState();
+                
+                // 可見時啟動輪播
+                if (isPlaylistMode) {
+                    playlistHandler.removeCallbacks(playlistRunner);
+                    // 這裡不立即切換，而是等待一個間隔後切換
+                    playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                }
             } else {
                 updateSensorState();
+                // 不可見時暫停輪播，省電
+                playlistHandler.removeCallbacks(playlistRunner);
             }
         }
 
@@ -243,8 +334,6 @@ public class ParallaxWallpaperService extends WallpaperService {
         @Override
         public void onSensorChanged(SensorEvent event) {
             if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-                // 讀取加速規數值
-                // 負號是為了校正方向，讓背景移動符合視差邏輯 (手機往左傾，背景往右移)
                 targetGyroX = -event.values[0]; 
                 targetGyroY = event.values[1];
             }
@@ -258,7 +347,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             draw();
         }
 
-        // 🔥🔥🔥 核心繪圖邏輯 (WYSIWYG 修正版) 🔥🔥🔥
         private void draw() {
             SurfaceHolder holder = getSurfaceHolder();
             Canvas canvas = null;
@@ -266,65 +354,46 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 canvas = holder.lockCanvas();
                 if (canvas != null) {
-                    // 安全檢查：沒圖就重讀，還是沒圖就畫黑底
                     if (currentBitmap == null || currentBitmap.isRecycled()) {
-                        loadSettings();
-                    }
-                    if (currentBitmap == null) {
                         canvas.drawColor(Color.BLACK);
                         return;
                     }
                     if (screenWidth == 0 || screenHeight == 0) return;
 
-                    // --- 步驟 1: 計算基礎填滿 (Base Scale / Aspect Fill) ---
-                    // 找出能讓圖片「剛好完全覆蓋螢幕」的最小縮放比例
-                    // 這是為了達到 CSS object-fit: cover 的效果
+                    // --- 1. 計算基礎填滿 (Aspect Fill) ---
                     float widthRatio = (float) screenWidth / currentBitmap.getWidth();
                     float heightRatio = (float) screenHeight / currentBitmap.getHeight();
                     float baseScale = Math.max(widthRatio, heightRatio);
 
-                    // --- 步驟 2: 計算總縮放 (Total Scale) ---
-                    // 總縮放 = 基礎填滿 * 用戶設定的放大倍率
+                    // --- 2. 計算總縮放 ---
                     float totalScale = baseScale * this.userScale;
 
-                    // --- 步驟 3: 計算在該縮放下的圖片實際尺寸 ---
+                    // --- 3. 計算實際尺寸 ---
                     float scaledImageWidth = currentBitmap.getWidth() * totalScale;
                     float scaledImageHeight = currentBitmap.getHeight() * totalScale;
 
-                    // --- 步驟 4: 計算安全邊界 (Max Clamp Limit) ---
-                    // 計算圖片比螢幕多出來的寬高的一半
-                    // 這是我們允許移動的最大極限，超過這裡就會露出黑底
+                    // --- 4. 計算安全邊界 (Max Offset) ---
                     float maxDx = (scaledImageWidth - screenWidth) / 2f;
                     float maxDy = (scaledImageHeight - screenHeight) / 2f;
 
-                    // --- 步驟 5: 平滑運算 (Lerp) ---
-                    // 讓數值慢慢接近目標，消除抖動
+                    // --- 5. 平滑運算 (Smoothing) ---
                     currentGyroX += (targetGyroX - currentGyroX) * SMOOTHING_FACTOR;
                     currentGyroY += (targetGyroY - currentGyroY) * SMOOTHING_FACTOR;
 
-                    // --- 步驟 6: 計算總位移 (Total Offset) ---
-                    // 總位移 = (手動平移 * 基礎縮放) + (陀螺儀 * 強度 * 30)
-                    // manualPan 乘上 baseScale 是為了讓 App 端的像素單位跟這裡對齊
-                    float totalOffsetX = (manualPanX * baseScale) + (currentGyroX * 30f * motionStrength);
-                    float totalOffsetY = (manualPanY * baseScale) + (currentGyroY * 30f * motionStrength);
+                    // --- 6. 計算總位移 (不需乘 baseScale，因為 manualPan 已經是螢幕像素) ---
+                    float totalOffsetX = manualPanX + (currentGyroX * 30f * motionStrength);
+                    float totalOffsetY = manualPanY + (currentGyroY * 30f * motionStrength);
 
-                    // --- 步驟 7: 絕對邊界限制 (Hard Clamp) ---
-                    // 將位移強制鎖死在 [-max, +max] 之間
+                    // --- 7. 絕對邊界限制 (Hard Clamp) ---
                     float finalOffsetX = Math.max(-maxDx, Math.min(totalOffsetX, maxDx));
                     float finalOffsetY = Math.max(-maxDy, Math.min(totalOffsetY, maxDy));
 
-                    // --- 步驟 8: 繪製 ---
-                    canvas.drawColor(Color.BLACK); // 清底
+                    // --- 8. 繪製 ---
+                    canvas.drawColor(Color.BLACK); 
 
                     Matrix matrix = new Matrix();
-                    
-                    // A. 將圖片中心移到 (0,0)
                     matrix.postTranslate(-currentBitmap.getWidth() / 2f, -currentBitmap.getHeight() / 2f);
-                    
-                    // B. 執行縮放
                     matrix.postScale(totalScale, totalScale);
-                    
-                    // C. 移回螢幕中心 + 加上最終位移
                     matrix.postTranslate((screenWidth / 2f) + finalOffsetX, (screenHeight / 2f) + finalOffsetY);
 
                     canvas.drawBitmap(currentBitmap, matrix, null);
@@ -335,7 +404,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                 if (canvas != null) holder.unlockCanvasAndPost(canvas);
             }
 
-            // FPS 控制
             handler.removeCallbacks(drawRunner);
             if (visible) {
                 long delay = 1000 / Math.max(1, targetFps); 

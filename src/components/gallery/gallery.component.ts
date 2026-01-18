@@ -581,9 +581,9 @@ interface CreatePlaylistState {
                         <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">桌布切換間隔</label>
                         <span class="text-emerald-400 font-mono text-sm">{{ tempPlaylistInterval }}秒</span>
                     </div>
-                    <input type="range" min="1" max="300" [(ngModel)]="tempPlaylistInterval" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                    <input type="range" min="5" max="300" [(ngModel)]="tempPlaylistInterval" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                     <div class="flex justify-between text-xs text-slate-500">
-                        <span>1秒</span>
+                        <span>5秒</span>
                         <span>300秒</span>
                     </div>
                  </div>
@@ -1171,13 +1171,13 @@ export class GalleryComponent {
       this.showWallpaperMenu.set(false);
   }
 
-  // 🔥 2. 輔助函式：將 Blob 轉為 Base64 字串
+  // 🔥 新增：輔助轉檔函式
   private blobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        // 移除 "data:image/jpeg;base64," 前綴，只保留純 Base64
+        // 移除 "data:image/jpeg;base64," 前綴
         const base64 = result.split(',')[1];
         resolve(base64);
       };
@@ -1186,7 +1186,7 @@ export class GalleryComponent {
     });
   }
 
-  // 🔥 3. 修正後的 applyPlaylistWallpaper 方法 (解決黑畫面與路徑錯誤)
+  // 🔥 修正後的 applyPlaylistWallpaper
   async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       
@@ -1196,64 +1196,76 @@ export class GalleryComponent {
         return;
       }
 
-      this.showToast('處理中...');
+      this.showToast(`準備處理 ${playlist.photoIds.length} 張照片...`);
 
       try {
-          // A. 儲存播放清單設定 (備份到 LocalStorage)
+          const playlistPaths: string[] = [];
+
+          // 迴圈處理每張照片
+          for (let i = 0; i < playlist.photoIds.length; i++) {
+              const photoId = playlist.photoIds[i];
+              const photo = this.getPhotoById(photoId);
+              if (!photo) continue;
+
+              let base64Data: string;
+              // 使用 as any 避開 TS 檢查
+              const sourcePath = (photo as any).path || (photo as any).webPath;
+
+              if (sourcePath) {
+                 const file = await Filesystem.readFile({ path: sourcePath });
+                 base64Data = file.data as string;
+              } else if (photo.url) {
+                 const response = await fetch(photo.url);
+                 const blob = await response.blob();
+                 base64Data = await this.blobToBase64(blob);
+              } else {
+                 console.warn(`跳過無法讀取的照片: ${photoId}`);
+                 continue;
+              }
+
+              // 依序寫入檔案
+              const fileName = `playlist_${i}.jpg`;
+              const savedFile = await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: Directory.Data,
+                recursive: true
+              });
+              
+              playlistPaths.push(savedFile.uri.replace('file://', ''));
+          }
+
+          if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
+
+          console.log('播放清單路徑:', playlistPaths);
+
+          // 準備設定
           const config = {
-              playlistId: this.photoService.activePlaylistId(),
-              interval: this.activePlaylist()?.interval,
-              sortOrder: this.activePlaylist()?.sortOrder,
               mode: 'playlist',
-              target: type
+              playlist: playlistPaths,
+              interval: playlist.interval || 60,
+              sortOrder: playlist.sortOrder,
+              motionEnabled: this.settings.settings().globalMotionEnabled,
+              motionStrength: this.settings.settings().globalMotionStrength,
+              targetFps: this.settings.settings().targetFps,
+              doubleTapToChange: this.settings.settings().doubleTapToChange,
+              scale: 1.1, // 預設一點縮放
+              panX: 0, panY: 0
           };
-          localStorage.setItem('LIVE_WALLPAPER_CONFIG', JSON.stringify(config));
-          localStorage.setItem('LIVE_WALLPAPER_TIMESTAMP', Date.now().toString());
-
-          // B. 【暫時解決方案】取出第一張圖片作為桌布
-          // 因為目前的 Java 程式碼尚未支援播放清單輪播，我們先傳「第一張圖」確保不會黑畫面
-          const firstPhotoId = playlist.photoIds[0];
-          const firstPhoto = this.getPhotoById(firstPhotoId);
           
-          if (!firstPhoto) {
-             throw new Error('找不到封面照片');
-          }
+          const jsonConfig = JSON.stringify(config);
+          localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonConfig);
 
-          // C. 準備圖片資料 (支援 Path 或 URL)
-          let base64Data: string;
-          // 嘗試取得路徑 (使用 as any 避開 TS 檢查)
-          const sourcePath = (firstPhoto as any).path || (firstPhoto as any).webPath;
-
-          if (sourcePath) {
-             // 情況 A: 有實體路徑
-             console.log('使用實體路徑讀取封面:', sourcePath);
-             const file = await Filesystem.readFile({ path: sourcePath });
-             base64Data = file.data as string;
-          } else if (firstPhoto.url) {
-             // 情況 B: 只有 URL (例如網頁匯入)
-             console.log('使用 URL 下載封面:', firstPhoto.url);
-             const response = await fetch(firstPhoto.url);
-             const blob = await response.blob();
-             base64Data = await this.blobToBase64(blob);
-          } else {
-             throw new Error('無法讀取照片資料');
-          }
-
-          // D. 寫入檔案
-          const savedFile = await Filesystem.writeFile({
-            path: 'current_wallpaper.jpg', 
-            data: base64Data,
-            directory: Directory.Data,
-            recursive: true
-          });
-
-          const nativePath = savedFile.uri.replace('file://', '');
-          console.log('播放清單封面已準備好:', nativePath);
-
-          // E. 呼叫 Native Bridge (傳送路徑)
-          if ((window as any).Android && (window as any).Android.setWallpaper) {
-              (window as any).Android.setWallpaper(nativePath);
-              this.showToast('已設定播放清單封面為桌布');
+          // 呼叫 Native
+          if ((window as any).Android) {
+              if ((window as any).Android.updateSettings) {
+                 (window as any).Android.updateSettings(jsonConfig);
+              }
+              if ((window as any).Android.setWallpaper) {
+                  // 設定第一張圖為啟動畫面
+                  (window as any).Android.setWallpaper(playlistPaths[0]);
+                  this.showToast(`成功！已設定 ${playlistPaths.length} 張輪播桌布`);
+              }
           } else {
               this.showToast('已儲存 (Bridge Inactive)');
           }
@@ -1262,10 +1274,6 @@ export class GalleryComponent {
           console.error(e);
           this.showToast('設定失敗: ' + (e as any).message);
       }
-
-      setTimeout(() => {
-          this.toastMessage.set(null);
-      }, 3000);
   }
 
   formatSortOrder(order: SortOrder | undefined): string {
