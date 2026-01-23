@@ -2,7 +2,6 @@ import { Component, computed, ElementRef, inject, input, OnDestroy, output, sign
 import { CommonModule } from '@angular/common';
 import { Photo, PhotoService } from '../../services/photo.service';
 import { SettingsService } from '../../services/settings.service';
-// 🔥 1. 引入 Capacitor 檔案系統套件
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 type FitMode = 'height' | 'width';
@@ -88,10 +87,7 @@ type FitMode = 'height' | 'width';
         <div class="grid grid-cols-1 gap-6 max-w-md mx-auto w-full pb-6">
            <div class="flex items-center justify-between">
               <h3 class="text-lg font-bold text-white">Editor Settings</h3>
-              <button (click)="togglePreview()" class="text-sm text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1">
-                Preview
-              </button>
-           </div>
+              </div>
 
            <div class="space-y-3">
              <div class="flex justify-between items-center">
@@ -225,7 +221,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   goBack = output<void>();
   updateCaption = output<string>(); 
   
-  // Reference to the image element for size calculations
   imageElement = viewChild<ElementRef<HTMLImageElement>>('imageElement');
 
   settingsService = inject(SettingsService);
@@ -235,7 +230,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   uiVisible = signal(true);
   
   fitMode = signal<FitMode>('height');
-  imageScale = signal(1.0); // Zoom scale
+  imageScale = signal(1.0);
   
   motionStrength = signal(1.0);
   motionEnabled = signal(false);
@@ -246,14 +241,12 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   gyroX = signal(0);
   gyroY = signal(0);
   
-  // Reactive boundaries for both Drag and Render clamping
   limitX = signal(0);
   limitY = signal(0);
   
   showWallpaperMenu = signal(false);
   toastMessage = signal<string | null>(null);
 
-  // Pointer Interaction State
   activePointers: PointerEvent[] = [];
   isDragging = false;
   isPinching = false;
@@ -273,24 +266,18 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   });
 
   transformStyle = computed(() => {
-    // 1. Calculate raw target position including manual pan + gyro tilt
     const rawX = this.panX() + this.gyroX();
     const rawY = this.panY() + this.gyroY();
     
-    // 2. Get current allowed boundaries
     const limX = this.limitX();
     const limY = this.limitY();
 
-    // 3. HARD CLAMP: Ensure the total translation never exceeds the image overflow limits
     const finalX = Math.max(-limX, Math.min(rawX, limX));
     const finalY = Math.max(-limY, Math.min(rawY, limY));
 
-    // 4. Rotation
     const rx = (this.gyroY() / 20) * -1; 
     const ry = (this.gyroX() / 20);
     
-    // 5. Apply Translation -> Rotation -> Scale
-    // Order matters: Translate then Rotate then Scale looks consistent for parallax.
     return `translate3d(${finalX}px, ${finalY}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${this.imageScale()})`;
   });
 
@@ -301,7 +288,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       const p = this.photo();
       const global = this.settingsService.settings();
 
-      // Load Motion Settings
       if (p.motionSettings) {
         this.motionStrength.set(p.motionSettings.strength);
         this.motionEnabled.set(p.motionSettings.enabled);
@@ -310,7 +296,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         this.motionEnabled.set(global.globalMotionEnabled);
       }
 
-      // Load View Settings (Fit, Pan, Scale)
       if (p.viewSettings) {
           this.fitMode.set(p.viewSettings.fitMode);
           this.panX.set(p.viewSettings.panX);
@@ -330,19 +315,16 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       }
     });
 
-    // Reactively update boundaries when fitMode or scale changes
     effect(() => {
+        // Trigger boundaries update when visual params change
         const mode = this.fitMode(); 
         const s = this.imageScale();
-        // Small timeout to allow DOM to reflow if needed
         setTimeout(() => this.updateBoundaries(), 50);
     });
   }
 
   ngAfterViewInit() {
-      // Initial calculation
       this.updateBoundaries();
-      // Listen for window resize to recalculate limits
       window.addEventListener('resize', this.onResize);
   }
 
@@ -360,13 +342,11 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       if (!img) return;
 
       const scale = this.imageScale();
-      // Effective dimension is visually scaled
       const imgW = img.offsetWidth * scale;
       const imgH = img.offsetHeight * scale;
       const screenW = window.innerWidth;
       const screenH = window.innerHeight;
 
-      // Calculate overflow
       const overflowX = Math.max(0, imgW - screenW);
       const overflowY = Math.max(0, imgH - screenH);
 
@@ -377,8 +357,9 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   openSettings() { this.isSettingsOpen.set(true); this.uiVisible.set(true); }
   closeSettings() { this.isSettingsOpen.set(false); }
   onBackgroundClick(event: MouseEvent) { this.isSettingsOpen() ? this.closeSettings() : this.uiVisible.update(v => !v); }
-  togglePreview() { this.isSettingsOpen.set(false); this.uiVisible.set(false); }
   
+  // Removed togglePreview() since button is gone.
+
   resetSettings() { 
      this.panX.set(0); this.panY.set(0); 
      this.fitMode.set('height');
@@ -407,7 +388,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
 
   setFitMode(mode: FitMode) { 
       this.fitMode.set(mode); 
-      // Reset pan on fit change to prevent getting lost
       this.panX.set(0); 
       this.panY.set(0); 
   }
@@ -423,10 +403,8 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   updateScale(event: Event) {
       const val = parseFloat((event.target as HTMLInputElement).value);
       this.imageScale.set(val);
-      // Ensure clamp is re-run immediately in case we scaled down
       this.updateBoundaries();
       
-      // Clamp panX/panY to new boundaries immediately
       const limX = this.limitX();
       const limY = this.limitY();
       this.panX.update(x => Math.max(-limX, Math.min(x, limX)));
@@ -441,13 +419,11 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.showWallpaperMenu.set(false);
   }
 
-  // 🔥 輔助函式：將 Blob 轉為 Base64 字串
   private blobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        // 移除 "data:image/jpeg;base64," 前綴，只保留純 Base64
         const base64 = result.split(',')[1]; 
         resolve(base64);
       };
@@ -456,7 +432,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     });
   }
 
-  // 🔥 修正後的 applyWallpaper (最強相容版：支援 URL 下載 + 修正順序)
+  // 🔥 Fixed applyWallpaper with proper motion strength logic (0 if disabled)
   async applyWallpaper(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       
@@ -464,40 +440,36 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.toastMessage.set('處理中...');
 
       try {
-          // 1. 準備設定檔 (加入 targetFps)
+          // 🔥 IMPORTANT: If motion is disabled, force strength to 0
+          const effectiveStrength = this.motionEnabled() ? this.motionStrength() : 0;
+
           const config = {
               photoId: currentPhoto.id,
               motionEnabled: this.motionEnabled(),
-              motionStrength: this.motionStrength(),
+              motionStrength: effectiveStrength, // Send 0 if disabled
               scale: this.imageScale(),
-              panX: this.panX(), // 用戶在 App 裡拖曳的位置
+              panX: this.panX(),
               panY: this.panY(),
-              targetFps: this.settingsService.settings().targetFps // 確保 FPS 設定也傳過去
+              targetFps: this.settingsService.settings().targetFps
           };
           const jsonConfig = JSON.stringify(config);
           
-          // 備份到 Web LocalStorage
           localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonConfig);
 
-          // 2. 準備圖片 (Path 或 Base64)
           let base64Data: string;
-          // 使用 as any 避開 TS 檢查
           const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
 
           if (sourcePath) {
-             console.log('使用實體路徑:', sourcePath);
              const file = await Filesystem.readFile({ path: sourcePath });
              base64Data = file.data as string;
           } else if (currentPhoto.url) {
-             console.log('下載 URL:', currentPhoto.url);
              const response = await fetch(currentPhoto.url);
              const blob = await response.blob();
              base64Data = await this.blobToBase64(blob);
           } else {
-             throw new Error('無法讀取照片 (無 Path 也無 URL)');
+             throw new Error('無法讀取照片');
           }
 
-          // 3. 寫入圖片檔案
           const fileName = 'current_wallpaper.jpg';
           const savedFile = await Filesystem.writeFile({
             path: fileName,
@@ -507,17 +479,15 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
           });
           const nativePath = savedFile.uri.replace('file://', '');
 
-          // 4. 🔥 關鍵順序修正：先傳送設定，再設定桌布 🔥
           if ((window as any).Android) {
-              
-              // (A) 先更新設定值 (縮放、位移)
               if ((window as any).Android.updateSettings) {
                  console.log('傳送設定給 Android:', jsonConfig);
                  (window as any).Android.updateSettings(jsonConfig);
               }
 
-              // (B) 再通知 Android 換圖 (這會觸發 Service 重讀設定)
               if ((window as any).Android.setWallpaper) {
+                  // 🔥 Fix: Pass 'type' (home/lock/both) if you implement separate logic later
+                  // For now we just call setWallpaper
                   (window as any).Android.setWallpaper(nativePath);
                   this.toastMessage.set('已發送設定至 Android 系統');
               }
@@ -544,7 +514,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
 
     if (this.activePointers.length === 1) {
-        // Start Drag
         this.isDragging = true;
         this.startX = event.clientX;
         this.startY = event.clientY;
@@ -552,34 +521,28 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         this.initialPanY = this.panY();
         this.updateBoundaries();
     } else if (this.activePointers.length === 2) {
-        // Start Pinch
         this.isPinching = true;
-        this.isDragging = false; // Disable drag during pinch
+        this.isDragging = false; 
         this.initialPinchDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
         this.initialScale = this.imageScale();
     }
   }
 
   onPointerMove(event: PointerEvent) {
-    // Update pointer record
     const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
     if (index !== -1) {
         this.activePointers[index] = event;
     }
 
     if (this.isPinching && this.activePointers.length === 2) {
-        // Handle Pinch
         const curDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
         if (this.initialPinchDist > 0) {
             const scaleFactor = curDist / this.initialPinchDist;
             let newScale = this.initialScale * scaleFactor;
-            
-            // Clamp Scale (1.0 to 3.0)
             newScale = Math.max(1.0, Math.min(newScale, 3.0));
             this.imageScale.set(newScale);
         }
     } else if (this.isDragging && this.activePointers.length === 1) {
-        // Handle Drag
         let newX = this.initialPanX + (event.clientX - this.startX);
         let newY = this.initialPanY + (event.clientY - this.startY);
         
@@ -595,7 +558,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   }
 
   onPointerUp(event: PointerEvent) {
-      // Remove pointer
       const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
       if (index !== -1) {
           this.activePointers.splice(index, 1);
@@ -607,10 +569,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       if (this.activePointers.length === 0) {
           this.isDragging = false;
       }
-      // If we dropped from 2 to 1 finger, we could resume dragging, 
-      // but usually better to reset drag state to avoid jumps.
       if (this.activePointers.length === 1) {
-          // Reset drag start reference to current position to avoid jump
           this.startX = this.activePointers[0].clientX;
           this.startY = this.activePointers[0].clientY;
           this.initialPanX = this.panX();
@@ -624,7 +583,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   }
   
   onWheel(event: WheelEvent) {
-      // Allow mouse wheel zoom for desktop testing
       if (this.isSettingsOpen()) return;
       event.preventDefault();
       
@@ -636,7 +594,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   }
 
   endDrag() { 
-      // Handled by onPointerUp mostly, but kept for compatibility
       if(this.activePointers.length === 0) this.isDragging = false; 
   }
 
@@ -665,11 +622,10 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   }
 
   private handleOrientation = (event: DeviceOrientationEvent) => {
-    // 1. Check if Motion is globally or locally enabled
     if (!this.motionEnabled()) return;
 
-    // 2. CHECK CENTRALIZED PAUSE LOGIC (Pause on Power Save)
-    // If we are effectively paused, we stop updating the Gyro values.
+    // 🔥🔥 CENTRALIZED PAUSE CHECK 🔥🔥
+    // This stops gyro calculations when Power Save is active
     if (this.settingsService.isEffectivelyPaused()) {
         return; 
     }

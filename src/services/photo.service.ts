@@ -1,4 +1,3 @@
-
 import { Injectable, signal, inject } from '@angular/core';
 import { SettingsService, AppSettings } from './settings.service';
 
@@ -66,11 +65,7 @@ export class PhotoService {
   activePlaylistId = signal<string | null>(null); // Persist playlist navigation
 
   constructor() {
-    // Initialize with a default playlist for demo purposes
-    this.playlists.set([
-      { id: 'favs', name: 'Favorites', photoIds: [], interval: 60, sortOrder: 'custom' },
-      { id: 'wallpapers', name: 'Wallpapers', photoIds: [], interval: 300, sortOrder: 'random' }
-    ]);
+    // No default playlists, start clean.
   }
 
   // Robust ID generator to avoid crypto.randomUUID errors in non-secure contexts
@@ -283,7 +278,7 @@ export class PhotoService {
          
          // Strategy B: Name + Size Match (Re-import scenario)
          if (!match) {
-            match = backup.photos.find(bp => bp.name === currentPhoto.name && bp.size === currentPhoto.file.size);
+           match = backup.photos.find(bp => bp.name === currentPhoto.name && bp.size === currentPhoto.file.size);
          }
 
          if (match) {
@@ -322,8 +317,7 @@ export class PhotoService {
               };
           });
           
-          // Merge logic: Overwrite existing playlists with same ID, add new ones
-          // Or just simple replace? Let's replace for a clean restore.
+          // Replace all playlists
           this.playlists.set(restoredPlaylists);
       }
 

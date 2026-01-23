@@ -1,5 +1,4 @@
-
-import { Injectable, signal, effect, computed } from '@angular/core';
+import { Injectable, signal, effect, computed, NgZone, inject } from '@angular/core';
 
 export type ThumbnailShape = 'squircle' | 'square' | 'rounded' | 'circle' | 'bevel' | 'leaf' | 'hexagon' | 'diamond';
 
@@ -30,19 +29,22 @@ export interface AppSettings {
   providedIn: 'root'
 })
 export class SettingsService {
+  private zone = inject(NgZone);
+
   // Reactive state for the System's actual Power Save status (pushed from Android)
   isSystemPowerSave = signal(false);
 
+  // 🔥 1. 更新預設值 (Defaults Updated)
   settings = signal<AppSettings>({
     targetFps: 60,
-    pauseOnPowerSave: true,
-    batteryOptimization: true,
-    runInBackground: false, // Default false, user must enable
-    globalMotionStrength: 1.0,
-    globalMotionEnabled: true,
+    pauseOnPowerSave: true,       // 預設開啟
+    batteryOptimization: false,   // 預設關閉 (Reduced Motion)
+    runInBackground: false,       // 預設關閉 (Keep Alive)
+    globalMotionStrength: 2.0,    // 預設 2x
+    globalMotionEnabled: true,    // 預設開啟
     thumbnailShape: 'squircle',
-    thumbnailGap: 16,
-    doubleTapToChange: false
+    thumbnailGap: 8,              // 預設 8px
+    doubleTapToChange: false      // 預設關閉
   });
 
   // CENTRAL LOGIC: Are we actually paused right now?
@@ -52,11 +54,22 @@ export class SettingsService {
   });
 
   constructor() {
+    // 🔥 2. 註冊 Native 呼叫接口 (Expose to Native)
+    // 讓 Android Java 端可以呼叫 window.updatePowerSaveMode(true/false)
+    (window as any).updatePowerSaveMode = (isActive: boolean) => {
+        console.log('[Web] Received Power Save Update:', isActive);
+        // 使用 NgZone 確保 Angular 偵測到這個外部變更
+        this.zone.run(() => {
+            this.setSystemPowerSave(isActive);
+        });
+    };
+
     // Attempt to load from localStorage
     const saved = localStorage.getItem('app_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // 合併儲存的設定與新的預設值 (確保新增的欄位有預設值)
         this.settings.set({ ...this.settings(), ...parsed });
       } catch (e) {
         console.warn('Failed to parse settings', e);
@@ -85,7 +98,7 @@ export class SettingsService {
             (window as any).Android.updateServiceNotification(isPaused ? 'paused' : 'active');
         }
         
-        console.log(`[App State] Effectively Paused: ${isPaused}`);
+        // console.log(`[App State] Effectively Paused: ${isPaused}`);
     });
   }
 

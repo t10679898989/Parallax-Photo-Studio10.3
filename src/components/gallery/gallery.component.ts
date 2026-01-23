@@ -1,10 +1,9 @@
-import { Component, inject, input, output, signal, computed, effect, viewChild, ElementRef } from '@angular/core';
+import { Component, inject, input, output, signal, computed, effect, viewChild, ElementRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Photo, Playlist, PhotoService, SortOrder } from '../../services/photo.service';
 import { SettingsService, ThumbnailShape } from '../../services/settings.service';
 import { LazyImgDirective } from '../../directives/lazy-img.directive';
-// 🔥 1. 引入 Capacitor 檔案系統套件
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 interface DetailsState {
@@ -244,13 +243,12 @@ interface CreatePlaylistState {
                      <div class="flex gap-3">
                         <button (click)="downloadBackup()" class="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-colors text-sm font-medium flex items-center justify-center gap-2 border border-slate-600">
                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                           備份設定
+                           備份設定 (Backup)
                         </button>
                         <button (click)="triggerRestore()" class="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors text-sm font-bold flex items-center justify-center gap-2 shadow-lg">
                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                           還原設定
+                           還原設定 (Restore)
                         </button>
-                        <input #restoreInput type="file" accept=".json" class="hidden" (change)="onRestoreFileSelected($event)">
                      </div>
                   </div>
                  </div>
@@ -511,6 +509,19 @@ interface CreatePlaylistState {
            </div>
         }
 
+        @if (showDoubleTapConfirm()) {
+           <div class="absolute inset-0 z-[150] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in" (click)="cancelDoubleTapConfirm()">
+              <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-emerald-500/30" (click)="$event.stopPropagation()">
+                 <h3 class="text-xl font-bold text-white mb-2">啟用雙擊切換?</h3>
+                 <p class="text-slate-400 mb-6">您想要在桌面上雙擊 (Double Tap) 來快速切換下一張桌布嗎?</p>
+                 <div class="flex gap-3">
+                    <button (click)="confirmDoubleTap(false)" class="flex-1 py-3 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors font-medium">不啟用</button>
+                    <button (click)="confirmDoubleTap(true)" class="flex-1 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 transition-colors font-bold">啟用</button>
+                 </div>
+              </div>
+           </div>
+        }
+
         @if (deletePlaylistConfirmVisible()) {
            <div class="absolute inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in" (click)="cancelDeletePlaylist()">
               <div class="bg-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl border border-red-500/30" (click)="$event.stopPropagation()">
@@ -546,15 +557,15 @@ interface CreatePlaylistState {
                         <p class="text-xs text-slate-400">排序: {{ formatSortOrder(activePlaylist()?.sortOrder) }}</p>
                     </div>
                     <div class="flex flex-col">
-                        <button (click)="applyPlaylistWallpaper('home')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
+                        <button (click)="openDoubleTapConfirm('home')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 group-hover:text-emerald-400"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                             <span class="text-base">主畫面</span>
                         </button>
-                        <button (click)="applyPlaylistWallpaper('lock')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
+                        <button (click)="openDoubleTapConfirm('lock')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 group-hover:text-emerald-400"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                             <span class="text-base">螢幕鎖定</span>
                         </button>
-                        <button (click)="applyPlaylistWallpaper('both')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
+                        <button (click)="openDoubleTapConfirm('both')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 group-hover:text-emerald-400"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M12 18h.01"/></svg>
                             <span class="text-base">主畫面和螢幕鎖定</span>
                         </button>
@@ -734,21 +745,20 @@ interface CreatePlaylistState {
       to { opacity: 1; transform: scale(1); }
     }
     @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-    /* Stylish Scrollbar for Grid */
     .custom-scroll::-webkit-scrollbar {
-        width: 10px; /* Wider scrollbar */
+        width: 10px;
     }
     .custom-scroll::-webkit-scrollbar-track {
-        background: #1e293b; /* Slate 800 - Visible track */
+        background: #1e293b;
     }
     .custom-scroll::-webkit-scrollbar-thumb {
-        background-color: #475569; /* Slate 600 - Visible thumb */
+        background-color: #475569;
         border-radius: 4px;
-        border: 2px solid #1e293b; /* padding around thumb matching track */
+        border: 2px solid #1e293b;
         background-clip: content-box;
     }
     .custom-scroll::-webkit-scrollbar-thumb:hover {
-        background-color: #64748b; /* Lighter on hover */
+        background-color: #64748b;
     }
   `]
 })
@@ -759,7 +769,9 @@ export class GalleryComponent {
   playlists = this.photoService.playlists;
   settings = inject(SettingsService);
   
-  // Reference to hidden file input
+  // 🔥 Inject NgZone for handling callbacks from Native
+  zone = inject(NgZone);
+
   restoreInput = viewChild<ElementRef<HTMLInputElement>>('restoreInput');
 
   selectPhoto = output<string>();
@@ -779,13 +791,13 @@ export class GalleryComponent {
   deletePlaylistConfirmVisible = signal(false);
   pendingDeletePlaylistId = signal<string | null>(null);
 
-  // Playlist Settings State (3-dot menu)
+  // Playlist Settings State
   playlistSettingsState = signal<PlaylistSettingsState>({ visible: false, playlistId: null });
   tempPlaylistName = '';
   tempPlaylistInterval = 60;
   tempSortOrder: SortOrder = 'custom';
   
-  // Set As... Menu
+  // Wallpaper Menu
   showWallpaperMenu = signal(false);
   toastMessage = signal<string | null>(null);
 
@@ -795,6 +807,10 @@ export class GalleryComponent {
   
   // Modals
   detailsState = signal<DetailsState>({ visible: false, photo: null });
+
+  // 🔥 NEW: Double Tap Confirmation State
+  showDoubleTapConfirm = signal(false);
+  pendingWallpaperType = signal<'home' | 'lock' | 'both' | null>(null);
 
   // Trash Info
   trashCount = computed(() => this.photoService.trash().length);
@@ -810,7 +826,6 @@ export class GalleryComponent {
       
       let items = this.photos().filter(p => playlist.photoIds.includes(p.id));
       
-      // Implement Sorting Logic based on selection
       switch (playlist.sortOrder) {
           case 'name_asc':
               return [...items].sort((a, b) => a.name.localeCompare(b.name));
@@ -821,22 +836,17 @@ export class GalleryComponent {
           case 'date_desc':
               return [...items].sort((a, b) => b.file.lastModified - a.file.lastModified);
           case 'random':
-              // For UI stability, 'random' displays in Custom (Insertion) order.
-              // True randomness happens at playback time in the wallpaper engine.
               return items; 
           case 'custom':
           default:
-              // Default is insertion order (as preserved in photoIds array)
               return items;
       }
   });
 
-  // Long Press & Drag Timer
   private longPressTimeout: any;
   private pointerStartX = 0;
   private pointerStartY = 0;
 
-  // Shapes Configuration
   shapes: {id: ThumbnailShape, name: string}[] = [
     { id: 'squircle', name: 'Squircle' },
     { id: 'square', name: 'Square' },
@@ -869,7 +879,16 @@ export class GalleryComponent {
     };
   });
 
-  // Helper to fetch photo object for cover images
+  constructor() {
+      // Register callback for Restore
+      (window as any).onRestoreFileLoaded = (jsonContent: string) => {
+          this.zone.run(() => {
+              const result = this.photoService.restoreBackup(jsonContent);
+              this.showToast(result.message);
+          });
+      };
+  }
+
   getPhotoById(id: string): Photo | undefined {
       return this.photos().find(p => p.id === id);
   }
@@ -906,14 +925,11 @@ export class GalleryComponent {
       setTimeout(() => this.toastMessage.set(null), 3000);
   }
 
-  // --- Pointer Interactions for Drag Select ---
-
   onPointerDown(event: PointerEvent, photoId: string) {
     if (event.button !== 0) return;
     this.pointerStartX = event.clientX;
     this.pointerStartY = event.clientY;
 
-    // Start timer for long press
     this.longPressTimeout = setTimeout(() => {
       this.startSelectionMode(photoId);
     }, 400); 
@@ -981,8 +997,6 @@ export class GalleryComponent {
     });
   }
 
-  // --- UI Action Methods ---
-
   onBackgroundClick(event: MouseEvent) {
     if (event.target === event.currentTarget && this.selectedIds().length > 0) {
         this.clearSelection();
@@ -1016,7 +1030,6 @@ export class GalleryComponent {
     this.clearSelection();
   }
 
-  // --- Create Playlist Workflow (Custom Modal) ---
   promptCreatePlaylist() {
     this.createPlaylistState.set({ visible: true, name: '' });
   }
@@ -1055,7 +1068,6 @@ export class GalleryComponent {
     this.detailsState.set({ visible: false, photo: null });
   }
 
-  // --- Delete Workflow (Items) ---
   requestDelete(event?: Event) {
     event?.stopPropagation(); 
     if (this.selectedIds().length === 0) return;
@@ -1070,17 +1082,14 @@ export class GalleryComponent {
     const ids = this.selectedIds();
     const playlistId = this.photoService.activePlaylistId();
     if (playlistId) {
-        // Only remove from playlist
         this.photoService.removeFromPlaylist(playlistId, ids);
     } else {
-        // Move to trash
         this.photoService.moveToTrash(ids);
     }
     this.clearSelection();
     this.showDeleteConfirm.set(false);
   }
 
-  // --- Empty Trash Workflow ---
   cleanAllTrash() {
     this.showEmptyTrashConfirm.set(true);
   }
@@ -1097,8 +1106,6 @@ export class GalleryComponent {
   restoreAllTrash() {
     this.photoService.restoreAllFromTrash();
   }
-
-  // --- Playlist Navigation & Management ---
 
   enterPlaylist(id: string) {
       this.photoService.activePlaylistId.set(id);
@@ -1135,14 +1142,11 @@ export class GalleryComponent {
       this.closePlaylistSettings();
   }
 
-  // --- Delete Playlist Workflow (Custom Modal) ---
-  
   requestDeletePlaylist() {
       const id = this.playlistSettingsState().playlistId;
       if (!id) return;
 
       this.pendingDeletePlaylistId.set(id);
-      // Hide settings modal first so confirmation is visible clearly
       this.closePlaylistSettings();
       this.deletePlaylistConfirmVisible.set(true);
   }
@@ -1155,14 +1159,13 @@ export class GalleryComponent {
   confirmDeletePlaylist() {
       const id = this.pendingDeletePlaylistId();
       if (id) {
-          this.exitPlaylist(); // Exit view first
+          this.exitPlaylist(); 
           this.photoService.deletePlaylist(id);
       }
       this.deletePlaylistConfirmVisible.set(false);
       this.pendingDeletePlaylistId.set(null);
   }
   
-  // --- Playlist Wallpaper Set ---
   openWallpaperMenu() {
       this.showWallpaperMenu.set(true);
   }
@@ -1171,13 +1174,37 @@ export class GalleryComponent {
       this.showWallpaperMenu.set(false);
   }
 
-  // 🔥 新增：輔助轉檔函式
+  // 🔥 NEW: Double Tap Confirmation Logic
+  openDoubleTapConfirm(type: 'home' | 'lock' | 'both') {
+      this.closeWallpaperMenu();
+      this.pendingWallpaperType.set(type);
+      this.showDoubleTapConfirm.set(true);
+  }
+
+  cancelDoubleTapConfirm() {
+      this.showDoubleTapConfirm.set(false);
+      this.pendingWallpaperType.set(null);
+  }
+
+  confirmDoubleTap(enable: boolean) {
+      // 1. Update Global Setting based on user choice
+      this.settings.updateSettings({ doubleTapToChange: enable });
+      
+      // 2. Proceed to apply wallpaper
+      const type = this.pendingWallpaperType();
+      if (type) {
+          this.applyPlaylistWallpaper(type);
+      }
+      
+      this.showDoubleTapConfirm.set(false);
+      this.pendingWallpaperType.set(null);
+  }
+
   private blobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
-        // 移除 "data:image/jpeg;base64," 前綴
         const base64 = result.split(',')[1];
         resolve(base64);
       };
@@ -1186,60 +1213,94 @@ export class GalleryComponent {
     });
   }
 
-  // 🔥 修正後的 applyPlaylistWallpaper
   async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
-      this.closeWallpaperMenu();
-      
       const playlist = this.activePlaylist();
       if (!playlist || playlist.photoIds.length === 0) {
         this.showToast('錯誤：播放清單是空的');
         return;
       }
 
-      this.showToast(`準備處理 ${playlist.photoIds.length} 張照片...`);
+      this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片`);
 
       try {
           const playlistPaths: string[] = [];
+          let newFilesCount = 0;
 
-          // 迴圈處理每張照片
           for (let i = 0; i < playlist.photoIds.length; i++) {
               const photoId = playlist.photoIds[i];
               const photo = this.getPhotoById(photoId);
               if (!photo) continue;
 
-              let base64Data: string;
-              // 使用 as any 避開 TS 檢查
+              const fileName = `cached_${photoId}.jpg`;
+              
+              // 1. Check Cache
+              try {
+                  const stat = await Filesystem.stat({
+                      path: fileName,
+                      directory: Directory.Data
+                  });
+                  playlistPaths.push(stat.uri.replace('file://', ''));
+                  continue; 
+              } catch (e) { }
+
+              // 2. Prepare Source
+              // as any to bypass TS strict check
               const sourcePath = (photo as any).path || (photo as any).webPath;
 
-              if (sourcePath) {
-                 const file = await Filesystem.readFile({ path: sourcePath });
-                 base64Data = file.data as string;
-              } else if (photo.url) {
-                 const response = await fetch(photo.url);
-                 const blob = await response.blob();
-                 base64Data = await this.blobToBase64(blob);
-              } else {
-                 console.warn(`跳過無法讀取的照片: ${photoId}`);
-                 continue;
+              // 3. Try Direct Copy
+              let copySuccess = false;
+              if (sourcePath && sourcePath.startsWith('file://')) {
+                  try {
+                      await Filesystem.copy({
+                          from: sourcePath,
+                          to: fileName,
+                          toDirectory: Directory.Data
+                      });
+                      
+                      const stat = await Filesystem.stat({
+                          path: fileName,
+                          directory: Directory.Data
+                      });
+                      
+                      playlistPaths.push(stat.uri.replace('file://', ''));
+                      copySuccess = true;
+                  } catch (copyError) {
+                      // console.warn('Direct copy failed, fallback to convert');
+                  }
               }
 
-              // 依序寫入檔案
-              const fileName = `playlist_${i}.jpg`;
-              const savedFile = await Filesystem.writeFile({
-                path: fileName,
-                data: base64Data,
-                directory: Directory.Data,
-                recursive: true
-              });
+              // 4. Fallback to Convert
+              if (!copySuccess) {
+                  let base64Data: string;
+                  
+                  if (sourcePath) {
+                     const file = await Filesystem.readFile({ path: sourcePath });
+                     base64Data = file.data as string;
+                  } else if (photo.url) {
+                     const response = await fetch(photo.url);
+                     const blob = await response.blob();
+                     base64Data = await this.blobToBase64(blob);
+                  } else {
+                     continue;
+                  }
+
+                  const savedFile = await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Data,
+                    recursive: true
+                  });
+                  playlistPaths.push(savedFile.uri.replace('file://', ''));
+              }
               
-              playlistPaths.push(savedFile.uri.replace('file://', ''));
+              newFilesCount++;
+              if (newFilesCount % 10 === 0) {
+                  this.showToast(`正在最佳化新照片... (${newFilesCount})`);
+              }
           }
 
           if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
 
-          console.log('播放清單路徑:', playlistPaths);
-
-          // 準備設定
           const config = {
               mode: 'playlist',
               playlist: playlistPaths,
@@ -1249,22 +1310,25 @@ export class GalleryComponent {
               motionStrength: this.settings.settings().globalMotionStrength,
               targetFps: this.settings.settings().targetFps,
               doubleTapToChange: this.settings.settings().doubleTapToChange,
-              scale: 1.1, // 預設一點縮放
+              scale: 1.1,
               panX: 0, panY: 0
           };
           
           const jsonConfig = JSON.stringify(config);
           localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonConfig);
 
-          // 呼叫 Native
           if ((window as any).Android) {
               if ((window as any).Android.updateSettings) {
                  (window as any).Android.updateSettings(jsonConfig);
               }
               if ((window as any).Android.setWallpaper) {
-                  // 設定第一張圖為啟動畫面
                   (window as any).Android.setWallpaper(playlistPaths[0]);
-                  this.showToast(`成功！已設定 ${playlistPaths.length} 張輪播桌布`);
+                  
+                  if (newFilesCount === 0) {
+                      this.showToast('設定成功！(秒速套用)');
+                  } else {
+                      this.showToast(`成功！已設定 ${playlistPaths.length} 張輪播桌布`);
+                  }
               }
           } else {
               this.showToast('已儲存 (Bridge Inactive)');
@@ -1296,26 +1360,34 @@ export class GalleryComponent {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
-  // --- BACKUP & RESTORE UI ---
+  // --- 🔥 NATIVE BACKUP & RESTORE ---
 
   downloadBackup() {
       const data = this.photoService.generateBackup();
-      const blob = new Blob([data], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `parallax-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      this.showToast('備份檔案已產生!');
+      if ((window as any).Android && (window as any).Android.backupSettings) {
+          // Native File Picker Save
+          (window as any).Android.backupSettings(data);
+      } else {
+          // Web Fallback
+          const blob = new Blob([data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `parallax-backup-${new Date().toISOString().slice(0, 10)}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+      }
   }
 
   triggerRestore() {
-      this.restoreInput()?.nativeElement.click();
+      if ((window as any).Android && (window as any).Android.restoreSettings) {
+          // Native File Picker Open
+          (window as any).Android.restoreSettings();
+      } else {
+          // Web Fallback
+          this.restoreInput()?.nativeElement.click();
+      }
   }
 
   onRestoreFileSelected(event: Event) {
@@ -1334,6 +1406,6 @@ export class GalleryComponent {
           
           reader.readAsText(file);
       }
-      input.value = ''; // Reset input
+      input.value = ''; 
   }
 }
