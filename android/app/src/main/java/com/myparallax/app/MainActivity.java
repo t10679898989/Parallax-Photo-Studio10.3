@@ -38,7 +38,7 @@ public class MainActivity extends BridgeActivity {
     private ActivityResultLauncher<String[]> permissionLauncher;
     private String pendingBackupData = null;
 
-    // 🔥 監聽來自 TileService 的廣播，同步 UI
+    // 🔥 1. 新增：廣播接收器，用於接收下拉選單的更新訊號
     private final BroadcastReceiver tileSyncReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -65,7 +65,6 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // 🔥 1. 檢查權限 (包含通知)
         checkPermissions();
 
         backupLauncher = registerForActivityResult(
@@ -93,7 +92,7 @@ public class MainActivity extends BridgeActivity {
             }
         );
 
-        // 🔥 註冊廣播接收器
+        // 🔥 2. 新增：註冊廣播接收器
         IntentFilter filter = new IntentFilter("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             registerReceiver(tileSyncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
@@ -110,7 +109,7 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {}
     }
 
-    // 🔥 讀取設定並通知 Web 端更新 UI
+    // 🔥 3. 新增：同步狀態到 Web 端
     private void syncKeepAliveState() {
         SharedPreferences sharedPref = getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
         String jsonStr = sharedPref.getString("settings_json", "{}");
@@ -124,32 +123,28 @@ public class MainActivity extends BridgeActivity {
         runOnUiThread(() -> {
             WebView webView = this.getBridge().getWebView();
             if (webView != null) {
-                // 呼叫 Web 端的 updateKeepAliveUI 函式
                 webView.evaluateJavascript("if(window.updateKeepAliveUI) window.updateKeepAliveUI(" + finalState + ");", null);
             }
         });
     }
 
-    // 🔥 2. 修正權限檢查邏輯 (加入 POST_NOTIFICATIONS)
     private void checkPermissions() {
         List<String> perms = new ArrayList<>();
 
-        // 儲存空間權限
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.READ_MEDIA_IMAGES);
             }
-            if (Build.VERSION.SDK_INT >= 34) { // Android 14+
+            if (Build.VERSION.SDK_INT >= 34) {
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != PackageManager.PERMISSION_GRANTED) {
                     perms.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED);
                 }
             }
-            // 🔥 通知權限 (Android 13+)
+            // 🔥 4. 新增：請求通知權限 (Android 13+)
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.POST_NOTIFICATIONS);
             }
         } else {
-            // Android 12 以下
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.READ_EXTERNAL_STORAGE);
             }
