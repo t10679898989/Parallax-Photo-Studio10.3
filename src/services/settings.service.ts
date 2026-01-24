@@ -34,7 +34,6 @@ export class SettingsService {
   // Reactive state for the System's actual Power Save status (pushed from Android)
   isSystemPowerSave = signal(false);
 
-  // 🔥 1. 更新預設值 (Defaults Updated)
   settings = signal<AppSettings>({
     targetFps: 60,
     pauseOnPowerSave: true,       // 預設開啟
@@ -54,13 +53,22 @@ export class SettingsService {
   });
 
   constructor() {
-    // 🔥 2. 註冊 Native 呼叫接口 (Expose to Native)
-    // 讓 Android Java 端可以呼叫 window.updatePowerSaveMode(true/false)
+    // 1. 註冊 Native -> Web 的 Power Save 更新
     (window as any).updatePowerSaveMode = (isActive: boolean) => {
         console.log('[Web] Received Power Save Update:', isActive);
         // 使用 NgZone 確保 Angular 偵測到這個外部變更
         this.zone.run(() => {
             this.setSystemPowerSave(isActive);
+        });
+    };
+
+    // 🔥 2. 新增：註冊 Native -> Web 的 Keep Alive UI 更新 (解決下拉選單不同步問題)
+    // 當使用者點擊下拉選單的快捷鍵時，Android 會呼叫這個方法
+    (window as any).updateKeepAliveUI = (isActive: boolean) => {
+        console.log('[Web] Received Keep Alive Update:', isActive);
+        this.zone.run(() => {
+            // 更新 runInBackground 狀態，這會觸發 UI 上的開關變動
+            this.settings.update(current => ({ ...current, runInBackground: isActive }));
         });
     };
 

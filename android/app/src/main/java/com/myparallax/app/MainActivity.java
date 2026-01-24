@@ -1,20 +1,18 @@
 package com.myparallax.app;
 
 import android.Manifest;
-import android.app.WallpaperManager;
 import android.app.Activity;
+import android.app.WallpaperManager;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerManager;
-import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.widget.Toast;
@@ -22,11 +20,14 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,7 +36,17 @@ public class MainActivity extends BridgeActivity {
     private ActivityResultLauncher<Intent> backupLauncher;
     private ActivityResultLauncher<Intent> restoreLauncher;
     private ActivityResultLauncher<String[]> permissionLauncher;
-    private String pendingBackupData = null; // 暫存要寫入的備份資料
+    private String pendingBackupData = null;
+
+    // 🔥 監聽來自 TileService 的廣播，同步 UI
+    private final BroadcastReceiver tileSyncReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if ("com.myparallax.app.ACTION_UPDATE_WALLPAPER".equals(intent.getAction())) {
+                syncKeepAliveState();
+            }
+        }
+    };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -44,20 +55,19 @@ public class MainActivity extends BridgeActivity {
         WebView webView = this.getBridge().getWebView();
         webView.addJavascriptInterface(new WebAppInterface(this), "Android");
 
-        // --- 1. 權限請求邏輯 (Android 13/14+) ---
         permissionLauncher = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
             boolean allGranted = true;
             for (Boolean b : result.values()) {
                 if (!b) allGranted = false;
             }
             if (!allGranted) {
-                Toast.makeText(this, "部分權限未允許，可能影響功能", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "部分權限未允許 (如通知或照片)，可能影響功能", Toast.LENGTH_LONG).show();
             }
         });
 
+        // 🔥 1. 檢查權限 (包含通知)
         checkPermissions();
 
-        // --- 2. 備份 (儲存檔案) ---
         backupLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
@@ -67,11 +77,10 @@ public class MainActivity extends BridgeActivity {
                         writeToFile(uri, pendingBackupData);
                     }
                 }
-                pendingBackupData = null; // 清除暫存
+                pendingBackupData = null;
             }
         );
 
-        // --- 3. 還原 (開啟檔案) ---
         restoreLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
@@ -83,29 +92,74 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         );
-    }
 
-    private void checkPermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                // Android 14 Partial Access 支援
-                if (Build.VERSION.SDK_INT >= 34) { // UPSIDE_DOWN_CAKE
-                     permissionLauncher.launch(new String[]{
-                         Manifest.permission.READ_MEDIA_IMAGES,
-                         Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED
-                     });
-                } else {
-                     permissionLauncher.launch(new String[]{Manifest.permission.READ_MEDIA_IMAGES});
-                }
-            }
+        // 🔥 註冊廣播接收器
+        IntentFilter filter = new IntentFilter("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            registerReceiver(tileSyncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionLauncher.launch(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE});
-            }
+            registerReceiver(tileSyncReceiver, filter);
         }
     }
 
-    // --- 檔案讀寫輔助方法 (在背景執行緒) ---
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        try {
+            unregisterReceiver(tileSyncReceiver);
+        } catch (Exception e) {}
+    }
+
+    // 🔥 讀取設定並通知 Web 端更新 UI
+    private void syncKeepAliveState() {
+        SharedPreferences sharedPref = getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
+        String jsonStr = sharedPref.getString("settings_json", "{}");
+        boolean isKeepAlive = false;
+        try {
+            JSONObject json = new JSONObject(jsonStr);
+            isKeepAlive = json.optBoolean("runInBackground", false);
+        } catch (Exception e) {}
+
+        boolean finalState = isKeepAlive;
+        runOnUiThread(() -> {
+            WebView webView = this.getBridge().getWebView();
+            if (webView != null) {
+                // 呼叫 Web 端的 updateKeepAliveUI 函式
+                webView.evaluateJavascript("if(window.updateKeepAliveUI) window.updateKeepAliveUI(" + finalState + ");", null);
+            }
+        });
+    }
+
+    // 🔥 2. 修正權限檢查邏輯 (加入 POST_NOTIFICATIONS)
+    private void checkPermissions() {
+        List<String> perms = new ArrayList<>();
+
+        // 儲存空間權限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.READ_MEDIA_IMAGES);
+            }
+            if (Build.VERSION.SDK_INT >= 34) { // Android 14+
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != PackageManager.PERMISSION_GRANTED) {
+                    perms.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED);
+                }
+            }
+            // 🔥 通知權限 (Android 13+)
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        } else {
+            // Android 12 以下
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                perms.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+            }
+        }
+
+        if (!perms.isEmpty()) {
+            permissionLauncher.launch(perms.toArray(new String[0]));
+        }
+    }
+
     private void writeToFile(Uri uri, String data) {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
@@ -138,13 +192,11 @@ public class MainActivity extends BridgeActivity {
                 is.close();
 
                 String jsonContent = sb.toString();
-                // 傳回 Web 端
                 runOnUiThread(() -> {
                     WebView webView = this.getBridge().getWebView();
-                    // 呼叫 editor.component.ts 裡註冊的 callback
-                    // 注意：這裡假設 web 端有掛載 window.onRestoreFileLoaded
-                    // 如果沒有，可以用 evaluateJavascript
-                    webView.evaluateJavascript("if(window.onRestoreFileLoaded) window.onRestoreFileLoaded(`" + jsonContent.replace("`", "\\`") + "`);", null);
+                    if (webView != null) {
+                        webView.evaluateJavascript("if(window.onRestoreFileLoaded) window.onRestoreFileLoaded(`" + jsonContent.replace("`", "\\`") + "`);", null);
+                    }
                 });
 
             } catch (Exception e) {
@@ -154,7 +206,6 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
-    // --- Javascript Interface ---
     public class WebAppInterface {
         Context mContext;
 
@@ -180,7 +231,6 @@ public class MainActivity extends BridgeActivity {
                  runOnUiThread(() -> {
                      try {
                          WallpaperManager wm = WallpaperManager.getInstance(mContext);
-                         // 簡單判斷：如果還沒設成動態桌布，就跳轉設定
                          if (wm.getWallpaperInfo() == null || 
                              !wm.getWallpaperInfo().getPackageName().equals(mContext.getPackageName())) {
                              
@@ -192,7 +242,6 @@ public class MainActivity extends BridgeActivity {
                              intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                              mContext.startActivity(intent);
                          } else {
-                             // 已經是動態桌布了，直接通知使用者
                              Toast.makeText(mContext, "桌布已更新", Toast.LENGTH_SHORT).show();
                          }
                      } catch (Exception e) {
@@ -203,7 +252,6 @@ public class MainActivity extends BridgeActivity {
              }
         }
 
-        // 🔥 新增：原生備份
         @JavascriptInterface
         public void backupSettings(String jsonData) {
             pendingBackupData = jsonData;
@@ -214,20 +262,18 @@ public class MainActivity extends BridgeActivity {
             backupLauncher.launch(intent);
         }
 
-        // 🔥 新增：原生還原
         @JavascriptInterface
         public void restoreSettings() {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("application/json"); // 或者 "*/*"
+            intent.setType("application/json"); 
             restoreLauncher.launch(intent);
         }
 
-        // 🔥 新增：更新前台服務通知文字
         @JavascriptInterface
         public void updateServiceNotification(String status) {
             Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_NOTIFICATION");
-            intent.putExtra("status", status); // "paused" or "active"
+            intent.putExtra("status", status); 
             intent.setPackage(mContext.getPackageName());
             mContext.sendBroadcast(intent);
         }
