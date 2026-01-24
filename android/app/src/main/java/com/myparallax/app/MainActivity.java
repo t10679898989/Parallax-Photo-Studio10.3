@@ -38,7 +38,7 @@ public class MainActivity extends BridgeActivity {
     private ActivityResultLauncher<String[]> permissionLauncher;
     private String pendingBackupData = null;
 
-    // 🔥 1. 新增：廣播接收器，用於接收下拉選單的更新訊號
+    // 🔥 1. 新增：廣播接收器，用於接收下拉選單的更新訊號 (同步 UI 用)
     private final BroadcastReceiver tileSyncReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -109,7 +109,7 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {}
     }
 
-    // 🔥 3. 新增：同步狀態到 Web 端
+    // 🔥 3. 新增：同步狀態到 Web 端的方法
     private void syncKeepAliveState() {
         SharedPreferences sharedPref = getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
         String jsonStr = sharedPref.getString("settings_json", "{}");
@@ -123,28 +123,33 @@ public class MainActivity extends BridgeActivity {
         runOnUiThread(() -> {
             WebView webView = this.getBridge().getWebView();
             if (webView != null) {
+                // 呼叫 Web 端的 updateKeepAliveUI 函式
                 webView.evaluateJavascript("if(window.updateKeepAliveUI) window.updateKeepAliveUI(" + finalState + ");", null);
             }
         });
     }
 
+    // 🔥 4. 修正：一定要請求 POST_NOTIFICATIONS 權限
     private void checkPermissions() {
         List<String> perms = new ArrayList<>();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
+            // 圖片權限
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.READ_MEDIA_IMAGES);
             }
+            // Android 14 部分存取權限
             if (Build.VERSION.SDK_INT >= 34) {
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) != PackageManager.PERMISSION_GRANTED) {
                     perms.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED);
                 }
             }
-            // 🔥 4. 新增：請求通知權限 (Android 13+)
+            // 🔥 重點：通知權限
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.POST_NOTIFICATIONS);
             }
         } else {
+            // Android 12 以下
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.READ_EXTERNAL_STORAGE);
             }
