@@ -17,12 +17,17 @@ export interface AppSettings {
   globalMotionStrength: number;
   globalMotionEnabled: boolean;
   
-  // New Visual Settings
+  // Visual Settings
   thumbnailShape: ThumbnailShape;
   thumbnailGap: number;
   
   // Interaction Settings
   doubleTapToChange: boolean;
+
+  // 🔥 [NEW] 鎖定畫面專用播放清單 (Lock Screen Playlist)
+  // 原本的 'playlist' 欄位我們將其視為 'Home Screen' (主畫面)
+  lock_playlist?: string[];
+  lock_playlistConfigs?: any[]; // 對應的個別設定 (Motion, Scale...)
 }
 
 @Injectable({
@@ -31,36 +36,43 @@ export interface AppSettings {
 export class SettingsService {
   private zone = inject(NgZone);
 
-  // Reactive state for the System's actual Power Save status (pushed from Android)
+  // Reactive state for the System's actual Power Save status
   isSystemPowerSave = signal(false);
 
-  // 🔥 1. 更新預設值 (Defaults Updated)
   settings = signal<AppSettings>({
     targetFps: 120,
     pauseOnPowerSave: true,       // 預設開啟
-    batteryOptimization: false,   // 預設關閉 (Reduced Motion)
-    runInBackground: true,       // 預設開啟 (Keep Alive)
+    batteryOptimization: false,   // 預設關閉
+    runInBackground: true,        // 預設開啟
     globalMotionStrength: 2.0,    // 預設 2x
     globalMotionEnabled: true,    // 預設開啟
     thumbnailShape: 'squircle',
     thumbnailGap: 8,              // 預設 8px
-    doubleTapToChange: false      // 預設關閉
+    doubleTapToChange: false,     // 預設關閉
+    
+    // 🔥 [NEW] 初始化為空陣列
+    lock_playlist: [],
+    lock_playlistConfigs: []
   });
 
-  // CENTRAL LOGIC: Are we actually paused right now?
-  // Returns true ONLY IF: "Pause on Power Save" is ON AND "System Power Save" is ACTIVE.
   isEffectivelyPaused = computed(() => {
       return this.settings().pauseOnPowerSave && this.isSystemPowerSave();
   });
 
   constructor() {
-    // 🔥 2. 註冊 Native 呼叫接口 (Expose to Native)
-    // 讓 Android Java 端可以呼叫 window.updatePowerSaveMode(true/false)
+    // 1. Native -> Web: Power Save Sync
     (window as any).updatePowerSaveMode = (isActive: boolean) => {
         console.log('[Web] Received Power Save Update:', isActive);
-        // 使用 NgZone 確保 Angular 偵測到這個外部變更
         this.zone.run(() => {
             this.setSystemPowerSave(isActive);
+        });
+    };
+
+    // 🔥 2. Native -> Web: Keep Alive Tile Sync (補回這段，確保下拉選單連動正常)
+    (window as any).updateKeepAliveUI = (isActive: boolean) => {
+        console.log('[Web] Received Keep Alive Update:', isActive);
+        this.zone.run(() => {
+            this.settings.update(current => ({ ...current, runInBackground: isActive }));
         });
     };
 
@@ -69,7 +81,7 @@ export class SettingsService {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // 合併儲存的設定與新的預設值 (確保新增的欄位有預設值)
+        // 合併儲存的設定與新的預設值
         this.settings.set({ ...this.settings(), ...parsed });
       } catch (e) {
         console.warn('Failed to parse settings', e);
@@ -81,24 +93,17 @@ export class SettingsService {
       const json = JSON.stringify(this.settings());
       localStorage.setItem('app_settings', json);
       
-      // Native Bridge Call 1: Update Settings Data
       if ((window as any).Android && (window as any).Android.updateSettings) {
           (window as any).Android.updateSettings(json);
       }
     });
 
-    // Effect: Update Notification Text based on "Effectively Paused" state
+    // Effect: Update Notification Text
     effect(() => {
         const isPaused = this.isEffectivelyPaused();
-        
-        // Native Bridge Call 2: Update Service Notification Text
-        // If paused, Android should show "Paused in Power Save"
-        // If running, Android should show "Parallax Studio Running" or "Playlist Active"
         if ((window as any).Android && (window as any).Android.updateServiceNotification) {
             (window as any).Android.updateServiceNotification(isPaused ? 'paused' : 'active');
         }
-        
-        // console.log(`[App State] Effectively Paused: ${isPaused}`);
     });
   }
 
@@ -106,7 +111,6 @@ export class SettingsService {
     this.settings.update(current => ({ ...current, ...partial }));
   }
 
-  // Method called by Native Android when system power save toggles
   setSystemPowerSave(isActive: boolean) {
     this.isSystemPowerSave.set(isActive);
   }

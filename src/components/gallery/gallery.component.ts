@@ -174,34 +174,34 @@ interface CreatePlaylistState {
                      </h3>
 
                      <div class="space-y-6">
-                        <div>
-                            <div class="flex justify-between text-sm text-slate-300 mb-3">
-                                <span>形狀 (Shape)</span>
-                                <span class="text-emerald-400 capitalize">{{ settings.settings().thumbnailShape }}</span>
-                            </div>
-                            <div class="grid grid-cols-4 gap-2">
-                                @for (shape of shapes; track shape.id) {
-                                    <button 
-                                        class="aspect-square bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all p-2"
-                                        [class.ring-2]="settings.settings().thumbnailShape === shape.id"
-                                        [class.ring-emerald-500]="settings.settings().thumbnailShape === shape.id"
-                                        [class.bg-slate-600]="settings.settings().thumbnailShape === shape.id"
-                                        [title]="shape.name"
-                                        (click)="updateSetting('thumbnailShape', shape.id)"
-                                    >
-                                        <div class="w-full h-full bg-slate-400" [ngStyle]="getShapeStyle(shape.id)"></div>
-                                    </button>
-                                }
-                            </div>
-                        </div>
+                       <div>
+                           <div class="flex justify-between text-sm text-slate-300 mb-3">
+                               <span>形狀 (Shape)</span>
+                               <span class="text-emerald-400 capitalize">{{ settings.settings().thumbnailShape }}</span>
+                           </div>
+                           <div class="grid grid-cols-4 gap-2">
+                               @for (shape of shapes; track shape.id) {
+                                   <button 
+                                       class="aspect-square bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all p-2"
+                                       [class.ring-2]="settings.settings().thumbnailShape === shape.id"
+                                       [class.ring-emerald-500]="settings.settings().thumbnailShape === shape.id"
+                                       [class.bg-slate-600]="settings.settings().thumbnailShape === shape.id"
+                                       [title]="shape.name"
+                                       (click)="updateSetting('thumbnailShape', shape.id)"
+                                   >
+                                       <div class="w-full h-full bg-slate-400" [ngStyle]="getShapeStyle(shape.id)"></div>
+                                   </button>
+                               }
+                           </div>
+                       </div>
 
-                        <div>
-                            <div class="flex justify-between text-sm text-slate-300 mb-2">
-                                <span>間距 (Gap)</span>
-                                <span class="font-mono text-emerald-400">{{ settings.settings().thumbnailGap }}px</span>
-                            </div>
-                            <input type="range" min="0" max="48" step="4" [ngModel]="settings.settings().thumbnailGap" (ngModelChange)="updateSetting('thumbnailGap', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" >
-                        </div>
+                       <div>
+                           <div class="flex justify-between text-sm text-slate-300 mb-2">
+                               <span>間距 (Gap)</span>
+                               <span class="font-mono text-emerald-400">{{ settings.settings().thumbnailGap }}px</span>
+                           </div>
+                           <input type="range" min="0" max="48" step="4" [ngModel]="settings.settings().thumbnailGap" (ngModelChange)="updateSetting('thumbnailGap', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" >
+                       </div>
                      </div>
                   </div>
 
@@ -238,7 +238,7 @@ interface CreatePlaylistState {
                         備份與還原 (Backup & Restore)
                      </h3>
                      <p class="text-sm text-slate-400 mb-4">
-                        將您的設定、縮放比例和播放清單儲存為檔案。還原時，系統會自動比對照片 ID 或檔名來套用設定。
+                       將您的設定、縮放比例和播放清單儲存為檔案。還原時，系統會自動比對照片 ID 或檔名來套用設定。
                      </p>
                      <div class="flex gap-3">
                         <button (click)="downloadBackup()" class="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-colors text-sm font-medium flex items-center justify-center gap-2 border border-slate-600">
@@ -642,8 +642,8 @@ interface CreatePlaylistState {
                 (scroll)="onScroll()"
             >
               <div 
-                class="grid"
-                [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'"
+                class="grid" 
+                [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'" 
                 [style.gap.px]="settings.settings().thumbnailGap"
               >
                 @for (photo of currentPhotos; track photo.id) {
@@ -673,9 +673,9 @@ interface CreatePlaylistState {
                            [class.border-2]="!selectedIds().includes(photo.id)"
                            [class.border-white]="!selectedIds().includes(photo.id)"
                       >
-                         @if (selectedIds().includes(photo.id)) {
-                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polyline points="20 6 9 17 4 12"/></svg>
-                         }
+                          @if (selectedIds().includes(photo.id)) {
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polyline points="20 6 9 17 4 12"/></svg>
+                          }
                       </div>
                     }
                   </div>
@@ -698,11 +698,11 @@ interface CreatePlaylistState {
                     (click)="enterPlaylist(playlist.id)"
                     class="bg-slate-800 rounded-xl p-4 border border-slate-700 hover:border-slate-600 transition-colors text-left group w-full"
                   >
-                     <div class="flex justify-between items-start mb-2">
+                      <div class="flex justify-between items-start mb-2">
                         <h3 class="font-bold text-white group-hover:text-emerald-400 transition-colors">{{ playlist.name }}</h3>
                         <span class="text-xs bg-slate-900 px-2 py-1 rounded text-slate-400">{{ playlist.photoIds.length }} 個項目</span>
-                     </div>
-                     <div class="aspect-video bg-slate-900 rounded-lg flex items-center justify-center text-slate-600 overflow-hidden relative">
+                      </div>
+                      <div class="aspect-video bg-slate-900 rounded-lg flex items-center justify-center text-slate-600 overflow-hidden relative">
                         @if(playlist.photoIds.length > 0) {
                             @let coverId = playlist.photoIds[0];
                             @let coverPhoto = getPhotoById(coverId);
@@ -714,11 +714,11 @@ interface CreatePlaylistState {
                         } @else {
                             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                         }
-                     </div>
-                     <div class="flex justify-between items-center mt-2">
-                         <p class="text-xs text-slate-500">{{ playlist.interval }}秒 循環</p>
-                         <p class="text-xs text-slate-500 capitalize">{{ formatSortOrder(playlist.sortOrder) }}</p>
-                     </div>
+                      </div>
+                      <div class="flex justify-between items-center mt-2">
+                          <p class="text-xs text-slate-500">{{ playlist.interval }}秒 循環</p>
+                          <p class="text-xs text-slate-500 capitalize">{{ formatSortOrder(playlist.sortOrder) }}</p>
+                      </div>
                   </button>
                 }
              </div>
@@ -769,7 +769,6 @@ export class GalleryComponent {
   playlists = this.photoService.playlists;
   settings = inject(SettingsService);
   
-  // 🔥 Inject NgZone for handling callbacks from Native
   zone = inject(NgZone);
 
   restoreInput = viewChild<ElementRef<HTMLInputElement>>('restoreInput');
@@ -784,38 +783,30 @@ export class GalleryComponent {
   showDeleteConfirm = signal(false);
   showEmptyTrashConfirm = signal(false);
   
-  // Playlist Creation Modal State
   createPlaylistState = signal<CreatePlaylistState>({ visible: false, name: '' });
   
-  // Playlist Deletion Modal State
   deletePlaylistConfirmVisible = signal(false);
   pendingDeletePlaylistId = signal<string | null>(null);
 
-  // Playlist Settings State
   playlistSettingsState = signal<PlaylistSettingsState>({ visible: false, playlistId: null });
   tempPlaylistName = '';
   tempPlaylistInterval = 60;
   tempSortOrder: SortOrder = 'custom';
   
-  // Wallpaper Menu
   showWallpaperMenu = signal(false);
   toastMessage = signal<string | null>(null);
 
-  // Selection Logic
   selectedIds = signal<string[]>([]);
   isSelecting = signal(false);
   
-  // Modals
   detailsState = signal<DetailsState>({ visible: false, photo: null });
 
   // 🔥 NEW: Double Tap Confirmation State
   showDoubleTapConfirm = signal(false);
   pendingWallpaperType = signal<'home' | 'lock' | 'both' | null>(null);
 
-  // Trash Info
   trashCount = computed(() => this.photoService.trash().length);
 
-  // Computed for current view
   activePlaylist = computed(() => {
     return this.playlists().find(p => p.id === this.photoService.activePlaylistId()) || null;
   });
@@ -880,7 +871,6 @@ export class GalleryComponent {
   });
 
   constructor() {
-      // Register callback for Restore
       (window as any).onRestoreFileLoaded = (jsonContent: string) => {
           this.zone.run(() => {
               const result = this.photoService.restoreBackup(jsonContent);
@@ -1213,6 +1203,7 @@ export class GalleryComponent {
     });
   }
 
+  // 🔥🔥 核心：根據使用者選擇 (Home / Lock / Both) 來決定資料寫入位置
   async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
       const playlist = this.activePlaylist();
       if (!playlist || playlist.photoIds.length === 0) {
@@ -1220,19 +1211,19 @@ export class GalleryComponent {
         return;
       }
 
-      this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片`);
+      this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片 (${type.toUpperCase()})`);
 
       try {
           const playlistPaths: string[] = [];
-          const playlistConfigs: any[] = []; // 🔥 新增：儲存個別設定
+          const playlistConfigs: any[] = []; 
           let newFilesCount = 0;
 
+          // ... (圖片處理與快取邏輯保持不變) ...
           for (let i = 0; i < playlist.photoIds.length; i++) {
               const photoId = playlist.photoIds[i];
               const photo = this.getPhotoById(photoId);
               if (!photo) continue;
 
-              // 🔥 1. 建立個別設定物件 (優先讀取 override，沒有則讀全域)
               const specificConfig = {
                   motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
                   motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
@@ -1244,7 +1235,6 @@ export class GalleryComponent {
 
               const fileName = `cached_${photoId}.jpg`;
               
-              // 2. Check Cache
               try {
                   const stat = await Filesystem.stat({
                       path: fileName,
@@ -1254,11 +1244,7 @@ export class GalleryComponent {
                   continue; 
               } catch (e) { }
 
-              // 3. Prepare Source
-              // as any to bypass TS strict check
               const sourcePath = (photo as any).path || (photo as any).webPath;
-
-              // 4. Try Direct Copy
               let copySuccess = false;
               if (sourcePath && sourcePath.startsWith('file://')) {
                   try {
@@ -1267,32 +1253,26 @@ export class GalleryComponent {
                           to: fileName,
                           toDirectory: Directory.Data
                       });
-                      
                       const stat = await Filesystem.stat({
                           path: fileName,
                           directory: Directory.Data
                       });
-                      
                       playlistPaths.push(stat.uri.replace('file://', ''));
                       copySuccess = true;
-                  } catch (copyError) {
-                      // console.warn('Direct copy failed, fallback to convert');
-                  }
+                  } catch (copyError) {}
               }
 
-              // 5. Fallback to Convert
               if (!copySuccess) {
                   let base64Data: string;
-                  
                   if (sourcePath) {
-                     const file = await Filesystem.readFile({ path: sourcePath });
-                     base64Data = file.data as string;
+                      const file = await Filesystem.readFile({ path: sourcePath });
+                      base64Data = file.data as string;
                   } else if (photo.url) {
-                     const response = await fetch(photo.url);
-                     const blob = await response.blob();
-                     base64Data = await this.blobToBase64(blob);
+                      const response = await fetch(photo.url);
+                      const blob = await response.blob();
+                      base64Data = await this.blobToBase64(blob);
                   } else {
-                     continue;
+                      continue;
                   }
 
                   const savedFile = await Filesystem.writeFile({
@@ -1312,21 +1292,31 @@ export class GalleryComponent {
 
           if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
 
-          const config = {
-              mode: 'playlist',
-              playlist: playlistPaths,
-              playlistConfigs: playlistConfigs, // 🔥 傳送設定陣列
-              interval: playlist.interval || 60,
-              sortOrder: playlist.sortOrder,
-              motionEnabled: this.settings.settings().globalMotionEnabled,
-              motionStrength: this.settings.settings().globalMotionStrength,
-              targetFps: this.settings.settings().targetFps,
-              doubleTapToChange: this.settings.settings().doubleTapToChange,
-              scale: 1.1,
-              panX: 0, panY: 0
-          };
+          // 🔥 讀取舊設定
+          let currentConfigStr = localStorage.getItem('LIVE_WALLPAPER_CONFIG');
+          let currentConfig = currentConfigStr ? JSON.parse(currentConfigStr) : {};
+
+          // 🔥 根據 type 更新對應欄位
+          if (type === 'home' || type === 'both') {
+              currentConfig.playlist = playlistPaths;
+              currentConfig.playlistConfigs = playlistConfigs;
+          }
+          if (type === 'lock' || type === 'both') {
+              currentConfig.lock_playlist = playlistPaths;
+              currentConfig.lock_playlistConfigs = playlistConfigs;
+          }
+
+          // 更新共用參數
+          currentConfig.mode = 'playlist';
+          currentConfig.interval = playlist.interval || 60;
+          currentConfig.sortOrder = playlist.sortOrder;
+          // 其他參數繼承全域設定
+          currentConfig.motionEnabled = this.settings.settings().globalMotionEnabled;
+          currentConfig.motionStrength = this.settings.settings().globalMotionStrength;
+          currentConfig.targetFps = this.settings.settings().targetFps;
+          currentConfig.doubleTapToChange = this.settings.settings().doubleTapToChange;
           
-          const jsonConfig = JSON.stringify(config);
+          const jsonConfig = JSON.stringify(currentConfig);
           localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonConfig);
 
           if ((window as any).Android) {
@@ -1334,6 +1324,7 @@ export class GalleryComponent {
                  (window as any).Android.updateSettings(jsonConfig);
               }
               if ((window as any).Android.setWallpaper) {
+                  // 注意：這裡只會觸發一次桌布重設，Service 會自己去讀取 jsonConfig 並決定顯示什麼
                   (window as any).Android.setWallpaper(playlistPaths[0]);
                   
                   if (newFilesCount === 0) {
@@ -1372,15 +1363,13 @@ export class GalleryComponent {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
-  // --- 🔥 NATIVE BACKUP & RESTORE ---
+  // --- NATIVE BACKUP & RESTORE ---
 
   downloadBackup() {
       const data = this.photoService.generateBackup();
       if ((window as any).Android && (window as any).Android.backupSettings) {
-          // Native File Picker Save
           (window as any).Android.backupSettings(data);
       } else {
-          // Web Fallback
           const blob = new Blob([data], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -1394,10 +1383,8 @@ export class GalleryComponent {
 
   triggerRestore() {
       if ((window as any).Android && (window as any).Android.restoreSettings) {
-          // Native File Picker Open
           (window as any).Android.restoreSettings();
       } else {
-          // Web Fallback
           this.restoreInput()?.nativeElement.click();
       }
   }
