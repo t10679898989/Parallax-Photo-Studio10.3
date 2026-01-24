@@ -40,6 +40,15 @@ public class ParallaxWallpaperService extends WallpaperService {
         return new ParallaxEngine();
     }
 
+    // 🔥 定義個別照片的設定結構
+    private static class PhotoConfig {
+        float motionStrength = 1.0f;
+        boolean motionEnabled = true;
+        float scale = 1.0f;
+        float panX = 0f;
+        float panY = 0f;
+    }
+
     private class ParallaxEngine extends Engine implements SensorEventListener {
         
         // --- 核心元件 ---
@@ -53,6 +62,7 @@ public class ParallaxWallpaperService extends WallpaperService {
         // --- 狀態 ---
         private boolean visible = false;
         private boolean isPowerSaveMode = false;
+        private String currentNotificationStatus = "Active";
         
         // --- 設定 (單張模式) ---
         private Bitmap currentBitmap;
@@ -63,16 +73,19 @@ public class ParallaxWallpaperService extends WallpaperService {
         // --- 設定 (播放清單模式) ---
         private boolean isPlaylistMode = false;
         private List<String> playlistPaths = new ArrayList<>();
-        private int playlistInterval = 60; // 秒
+        private List<PhotoConfig> playlistConfigs = new ArrayList<>(); // 🔥 儲存每張照片的設定
+        private int playlistInterval = 60; 
         private int currentPlaylistIndex = 0;
         
-        // --- 通用設定 ---
-        private float motionStrength = 1.0f;
+        // --- 通用設定 (預設值) ---
+        private float globalMotionStrength = 1.0f; // 改名以區分
+        private float currentMotionStrength = 1.0f; // 當前實際使用的強度
         private int targetFps = 60; 
         private boolean runInBackground = false;
         private boolean pauseOnPowerSave = true;
         private boolean doubleTapToChange = false;
-        private boolean motionEnabled = true; // 🔥 新增：動態開關
+        private boolean globalMotionEnabled = true; // 改名以區分
+        private boolean currentMotionEnabled = true; // 當前實際使用的開關
 
         // --- 平滑運算 ---
         private int screenWidth = 0, screenHeight = 0;
@@ -88,7 +101,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                 if ("com.myparallax.app.ACTION_UPDATE_WALLPAPER".equals(action)) {
                     loadSettings();
                 } else if ("com.myparallax.app.ACTION_UPDATE_NOTIFICATION".equals(action)) {
-                    // 更新通知欄文字
                     String status = intent.getStringExtra("status");
                     updateNotificationText(status);
                 }
@@ -104,14 +116,17 @@ public class ParallaxWallpaperService extends WallpaperService {
                     if (isPowerSaveMode != newState) {
                         isPowerSaveMode = newState;
                         updateSensorState();
-                        // 通知 Web 端
-                        notifyWebPowerSaveState(isPowerSaveMode);
+                        // 狀態改變時更新通知文字
+                        if (isPowerSaveMode && pauseOnPowerSave) {
+                            updateNotificationText("paused");
+                        } else {
+                            updateNotificationText("active");
+                        }
                     }
                 }
             }
         };
 
-        // --- 繪圖迴圈 ---
         private final Runnable drawRunner = new Runnable() {
             @Override
             public void run() {
@@ -119,7 +134,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
         };
 
-        // --- 輪播計時任務 ---
         private final Runnable playlistRunner = new Runnable() {
             @Override
             public void run() {
@@ -153,7 +167,7 @@ public class ParallaxWallpaperService extends WallpaperService {
 
             IntentFilter filter = new IntentFilter();
             filter.addAction("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
-            filter.addAction("com.myparallax.app.ACTION_UPDATE_NOTIFICATION"); // 新增通知更新廣播
+            filter.addAction("com.myparallax.app.ACTION_UPDATE_NOTIFICATION");
             filter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -163,7 +177,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
             registerReceiver(powerSaveReceiver, new IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED));
 
-            // 初始檢查省電模式
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null) isPowerSaveMode = pm.isPowerSaveMode();
 
@@ -188,9 +201,10 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 JSONObject json = new JSONObject(jsonStr);
                 
+                // 1. 讀取全域設定
                 if (json.has("scale")) userScale = (float) json.getDouble("scale");
-                if (json.has("motionStrength")) motionStrength = (float) json.getDouble("motionStrength");
-                if (json.has("motionEnabled")) motionEnabled = json.optBoolean("motionEnabled", true); // 🔥 讀取開關
+                if (json.has("motionStrength")) globalMotionStrength = (float) json.getDouble("motionStrength");
+                if (json.has("motionEnabled")) globalMotionEnabled = json.optBoolean("motionEnabled", true);
                 
                 if (json.has("panX")) manualPanX = (float) json.getDouble("panX");
                 if (json.has("panY")) manualPanY = (float) json.getDouble("panY");
@@ -202,21 +216,50 @@ public class ParallaxWallpaperService extends WallpaperService {
                 String mode = json.optString("mode", "single");
                 isPlaylistMode = "playlist".equals(mode);
 
+                // 2. 初始化目前使用的參數 (預設為全域)
+                currentMotionStrength = globalMotionStrength;
+                currentMotionEnabled = globalMotionEnabled;
+
                 if (isPlaylistMode) {
                     playlistInterval = json.optInt("interval", 60);
                     if (playlistInterval < 5) playlistInterval = 5;
 
                     playlistPaths.clear();
+                    playlistConfigs.clear(); // 🔥 清除舊設定
+
                     JSONArray paths = json.optJSONArray("playlist");
+                    // 🔥 嘗試讀取設定陣列
+                    JSONArray configs = json.optJSONArray("playlistConfigs");
+
                     if (paths != null) {
                         for (int i = 0; i < paths.length(); i++) {
                             playlistPaths.add(paths.getString(i));
+                            
+                            // 解析個別設定
+                            PhotoConfig config = new PhotoConfig();
+                            // 預設繼承全域
+                            config.motionStrength = globalMotionStrength;
+                            config.motionEnabled = globalMotionEnabled;
+                            config.scale = 1.1f; // 預設縮放
+
+                            if (configs != null && i < configs.length()) {
+                                JSONObject c = configs.optJSONObject(i);
+                                if (c != null) {
+                                    config.motionStrength = (float) c.optDouble("motionStrength", globalMotionStrength);
+                                    config.motionEnabled = c.optBoolean("motionEnabled", globalMotionEnabled);
+                                    config.scale = (float) c.optDouble("scale", 1.1);
+                                    config.panX = (float) c.optDouble("panX", 0);
+                                    config.panY = (float) c.optDouble("panY", 0);
+                                }
+                            }
+                            playlistConfigs.add(config);
                         }
                     }
                     
                     if (currentBitmap == null && !playlistPaths.isEmpty()) {
                         currentPlaylistIndex = 0;
-                        loadImage(playlistPaths.get(0));
+                        // 載入第一張並套用其設定
+                        loadNextImageInternal(0);
                     }
                     
                     if (visible) {
@@ -225,6 +268,7 @@ public class ParallaxWallpaperService extends WallpaperService {
                     }
 
                 } else {
+                    // 單張模式直接使用讀到的參數
                     playlistHandler.removeCallbacks(playlistRunner); 
                     if (!singleImagePath.isEmpty()) {
                         loadImage(singleImagePath);
@@ -237,7 +281,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                 handleForegroundService();
                 
                 if (visible) {
-                    // 強制重繪一次，確保設定生效
                     handler.removeCallbacks(drawRunner);
                     handler.post(drawRunner);
                 }
@@ -255,9 +298,31 @@ public class ParallaxWallpaperService extends WallpaperService {
                 currentPlaylistIndex = 0;
             }
             
-            String nextPath = playlistPaths.get(currentPlaylistIndex);
+            loadNextImageInternal(currentPlaylistIndex);
+        }
+
+        // 🔥 內部方法：載入指定索引的圖片並套用設定
+        private void loadNextImageInternal(int index) {
+            if (index < 0 || index >= playlistPaths.size()) return;
+
+            String nextPath = playlistPaths.get(index);
             loadImage(nextPath);
+
+            // 🔥 套用個別設定
+            if (index < playlistConfigs.size()) {
+                PhotoConfig config = playlistConfigs.get(index);
+                currentMotionStrength = config.motionStrength;
+                currentMotionEnabled = config.motionEnabled;
+                userScale = config.scale; // 如果有存 scale 的話
+                manualPanX = config.panX;
+                manualPanY = config.panY;
+            } else {
+                // 回退到全域
+                currentMotionStrength = globalMotionStrength;
+                currentMotionEnabled = globalMotionEnabled;
+            }
             
+            // 重置動量
             targetGyroX = 0; targetGyroY = 0;
             currentGyroX = 0; currentGyroY = 0;
         }
@@ -281,14 +346,19 @@ public class ParallaxWallpaperService extends WallpaperService {
 
         private void handleForegroundService() {
             if (runInBackground) {
-                updateNotificationText("Active");
+                updateNotificationText(currentNotificationStatus);
             } else {
                 stopForeground(true);
             }
         }
 
+        // 🔥 更新通知欄邏輯優化
         private void updateNotificationText(String status) {
-            if (!runInBackground) return;
+            if (status == null) status = "active";
+            // 統一狀態字串 (active / paused)
+            currentNotificationStatus = status.toLowerCase();
+
+            if (!runInBackground) return; // 如果沒開 Keep Alive 就不顯示
 
             String CHANNEL_ID = "wallpaper_service_channel";
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -299,9 +369,16 @@ public class ParallaxWallpaperService extends WallpaperService {
             Intent intent = new Intent(getApplicationContext(), MainActivity.class);
             PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
 
+            String contentText;
+            if (currentNotificationStatus.equals("paused")) {
+                contentText = "前景運作暫停中 (省電模式)";
+            } else {
+                contentText = isPlaylistMode ? "Parallax Studio 輪播中" : "Parallax Studio 執行中";
+            }
+
             Notification notification = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID)
                     .setContentTitle("Parallax Wallpaper")
-                    .setContentText(status.equals("paused") ? "Paused (Power Save)" : "Running")
+                    .setContentText(contentText)
                     .setSmallIcon(android.R.drawable.ic_menu_gallery)
                     .setContentIntent(pendingIntent)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -311,13 +388,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 startForeground(1, notification);
             } catch (Exception e) {}
-        }
-
-        // 🔥 通知 Web 端省電模式變更
-        private void notifyWebPowerSaveState(boolean active) {
-             // 這裡我們只更新 sensor 狀態，Web 端會透過 SettingsService 的輪詢或事件機制得知
-             // 更好的做法是發送廣播給 MainActivity，由它呼叫 WebView
-             // 但為了簡化，我們主要依賴 Native 端的行為控制
         }
 
         @Override
@@ -343,7 +413,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             if (shouldRun) {
                 sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME);
                 handler.removeCallbacks(drawRunner);
-                handler.post(drawRunner); // 🔥 確保立即啟動繪圖
+                handler.post(drawRunner); 
             } else {
                 sensorManager.unregisterListener(this);
                 handler.removeCallbacks(drawRunner);
@@ -397,8 +467,8 @@ public class ParallaxWallpaperService extends WallpaperService {
                     float maxDx = (scaledImageWidth - screenWidth) / 2f;
                     float maxDy = (scaledImageHeight - screenHeight) / 2f;
 
-                    // 🔥 Motion 邏輯修正：如果強度 <= 0 或未開啟，直接歸零
-                    if (motionEnabled && motionStrength > 0) {
+                    // 🔥 使用 currentMotionEnabled 和 currentMotionStrength (動態切換)
+                    if (currentMotionEnabled && currentMotionStrength > 0) {
                         currentGyroX += (targetGyroX - currentGyroX) * SMOOTHING_FACTOR;
                         currentGyroY += (targetGyroY - currentGyroY) * SMOOTHING_FACTOR;
                     } else {
@@ -406,8 +476,8 @@ public class ParallaxWallpaperService extends WallpaperService {
                         currentGyroY = 0;
                     }
 
-                    float totalOffsetX = manualPanX + (currentGyroX * 30f * motionStrength);
-                    float totalOffsetY = manualPanY + (currentGyroY * 30f * motionStrength);
+                    float totalOffsetX = manualPanX + (currentGyroX * 30f * currentMotionStrength);
+                    float totalOffsetY = manualPanY + (currentGyroY * 30f * currentMotionStrength);
 
                     float finalOffsetX = Math.max(-maxDx, Math.min(totalOffsetX, maxDx));
                     float finalOffsetY = Math.max(-maxDy, Math.min(totalOffsetY, maxDy));
@@ -428,7 +498,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
 
             handler.removeCallbacks(drawRunner);
-            // 只有在可見且非省電暫停狀態下才繼續繪圖
+            
             boolean shouldAnimate = visible && (!isPowerSaveMode || !pauseOnPowerSave);
             
             if (shouldAnimate) {

@@ -1224,6 +1224,7 @@ export class GalleryComponent {
 
       try {
           const playlistPaths: string[] = [];
+          const playlistConfigs: any[] = []; // 🔥 新增：儲存個別設定
           let newFilesCount = 0;
 
           for (let i = 0; i < playlist.photoIds.length; i++) {
@@ -1231,9 +1232,19 @@ export class GalleryComponent {
               const photo = this.getPhotoById(photoId);
               if (!photo) continue;
 
+              // 🔥 1. 建立個別設定物件 (優先讀取 override，沒有則讀全域)
+              const specificConfig = {
+                  motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
+                  motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
+                  scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
+                  panX: photo.viewSettings ? photo.viewSettings.panX : 0,
+                  panY: photo.viewSettings ? photo.viewSettings.panY : 0
+              };
+              playlistConfigs.push(specificConfig);
+
               const fileName = `cached_${photoId}.jpg`;
               
-              // 1. Check Cache
+              // 2. Check Cache
               try {
                   const stat = await Filesystem.stat({
                       path: fileName,
@@ -1243,11 +1254,11 @@ export class GalleryComponent {
                   continue; 
               } catch (e) { }
 
-              // 2. Prepare Source
+              // 3. Prepare Source
               // as any to bypass TS strict check
               const sourcePath = (photo as any).path || (photo as any).webPath;
 
-              // 3. Try Direct Copy
+              // 4. Try Direct Copy
               let copySuccess = false;
               if (sourcePath && sourcePath.startsWith('file://')) {
                   try {
@@ -1269,7 +1280,7 @@ export class GalleryComponent {
                   }
               }
 
-              // 4. Fallback to Convert
+              // 5. Fallback to Convert
               if (!copySuccess) {
                   let base64Data: string;
                   
@@ -1304,6 +1315,7 @@ export class GalleryComponent {
           const config = {
               mode: 'playlist',
               playlist: playlistPaths,
+              playlistConfigs: playlistConfigs, // 🔥 傳送設定陣列
               interval: playlist.interval || 60,
               sortOrder: playlist.sortOrder,
               motionEnabled: this.settings.settings().globalMotionEnabled,
