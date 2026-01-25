@@ -1,5 +1,6 @@
 package com.myparallax.app;
 
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -35,12 +36,14 @@ import java.util.List;
 
 public class ParallaxWallpaperService extends WallpaperService {
 
+    private static final String CHANNEL_ID = "wallpaper_service_channel";
+    private static final int NOTIFICATION_ID = 1;
+
     @Override
     public Engine onCreateEngine() {
         return new ParallaxEngine();
     }
 
-    // 🔥 定義個別照片的設定結構
     private static class PhotoConfig {
         float motionStrength = 1.0f;
         boolean motionEnabled = true;
@@ -51,49 +54,54 @@ public class ParallaxWallpaperService extends WallpaperService {
 
     private class ParallaxEngine extends Engine implements SensorEventListener {
         
-        // --- 核心元件 ---
         private final Handler handler = new Handler();
         private final Handler playlistHandler = new Handler(); 
         private SensorManager sensorManager;
         private Sensor accelerometer;
         private GestureDetector gestureDetector;
         private SharedPreferences prefs;
+        private KeyguardManager keyguardManager;
 
-        // --- 狀態 ---
         private boolean visible = false;
         private boolean isPowerSaveMode = false;
+        private boolean isLocked = false;
         private String currentNotificationStatus = "Active";
         
-        // --- 設定 (單張模式) ---
         private Bitmap currentBitmap;
         private float userScale = 1.0f;
         private float manualPanX = 0;
         private float manualPanY = 0;
         
-        // --- 設定 (播放清單模式) ---
         private boolean isPlaylistMode = false;
-        private List<String> playlistPaths = new ArrayList<>();
-        private List<PhotoConfig> playlistConfigs = new ArrayList<>(); // 🔥 儲存每張照片的設定
-        private int playlistInterval = 60; 
+
+        private List<String> homePlaylistPaths = new ArrayList<>();
+        private List<PhotoConfig> homePlaylistConfigs = new ArrayList<>();
+        private int homePlaylistIndex = 0;
+
+        private List<String> lockPlaylistPaths = new ArrayList<>();
+        private List<PhotoConfig> lockPlaylistConfigs = new ArrayList<>();
+        private int lockPlaylistIndex = 0;
+
+        private List<String> currentPlaylistPaths; 
+        private List<PhotoConfig> currentPlaylistConfigs;
         private int currentPlaylistIndex = 0;
+
+        private int playlistInterval = 60; 
         
-        // --- 通用設定 (預設值) ---
-        private float globalMotionStrength = 1.0f; // 改名以區分
-        private float currentMotionStrength = 1.0f; // 當前實際使用的強度
+        private float globalMotionStrength = 1.0f; 
+        private float currentMotionStrength = 1.0f; 
         private int targetFps = 60; 
         private boolean runInBackground = false;
         private boolean pauseOnPowerSave = true;
         private boolean doubleTapToChange = false;
-        private boolean globalMotionEnabled = true; // 改名以區分
-        private boolean currentMotionEnabled = true; // 當前實際使用的開關
+        private boolean globalMotionEnabled = true; 
+        private boolean currentMotionEnabled = true; 
 
-        // --- 平滑運算 ---
         private int screenWidth = 0, screenHeight = 0;
         private float targetGyroX = 0, targetGyroY = 0;
         private float currentGyroX = 0, currentGyroY = 0;
         private final float SMOOTHING_FACTOR = 0.1f; 
 
-        // --- 廣播 ---
         private final BroadcastReceiver updateReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -103,6 +111,10 @@ public class ParallaxWallpaperService extends WallpaperService {
                 } else if ("com.myparallax.app.ACTION_UPDATE_NOTIFICATION".equals(action)) {
                     String status = intent.getStringExtra("status");
                     updateNotificationText(status);
+                } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
+                    checkLockState();
+                } else if (Intent.ACTION_SCREEN_OFF.equals(action) || Intent.ACTION_SCREEN_ON.equals(action)) {
+                    checkLockState();
                 }
             }
         };
@@ -116,7 +128,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                     if (isPowerSaveMode != newState) {
                         isPowerSaveMode = newState;
                         updateSensorState();
-                        // 狀態改變時更新通知文字
                         if (isPowerSaveMode && pauseOnPowerSave) {
                             updateNotificationText("paused");
                         } else {
@@ -137,7 +148,7 @@ public class ParallaxWallpaperService extends WallpaperService {
         private final Runnable playlistRunner = new Runnable() {
             @Override
             public void run() {
-                if (visible && isPlaylistMode && playlistPaths.size() > 1) {
+                if (visible && isPlaylistMode && currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
                     loadNextImage();
                     playlistHandler.postDelayed(this, playlistInterval * 1000L);
                 }
@@ -150,12 +161,16 @@ public class ParallaxWallpaperService extends WallpaperService {
 
             sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
             accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
             prefs = getSharedPreferences("WallpaperPrefs", MODE_PRIVATE);
+
+            currentPlaylistPaths = homePlaylistPaths;
+            currentPlaylistConfigs = homePlaylistConfigs;
 
             gestureDetector = new GestureDetector(getApplicationContext(), new GestureDetector.SimpleOnGestureListener() {
                 @Override
                 public boolean onDoubleTap(MotionEvent e) {
-                    if (doubleTapToChange && isPlaylistMode && playlistPaths.size() > 1) {
+                    if (doubleTapToChange && isPlaylistMode && currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
                         loadNextImage();
                         playlistHandler.removeCallbacks(playlistRunner);
                         playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
@@ -168,7 +183,9 @@ public class ParallaxWallpaperService extends WallpaperService {
             IntentFilter filter = new IntentFilter();
             filter.addAction("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
             filter.addAction("com.myparallax.app.ACTION_UPDATE_NOTIFICATION");
-            filter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);
+            filter.addAction(Intent.ACTION_USER_PRESENT);
+            filter.addAction(Intent.ACTION_SCREEN_OFF);
+            filter.addAction(Intent.ACTION_SCREEN_ON);
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 registerReceiver(updateReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
@@ -180,6 +197,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null) isPowerSaveMode = pm.isPowerSaveMode();
 
+            ensureChannel();
             loadSettings();
         }
 
@@ -194,6 +212,63 @@ public class ParallaxWallpaperService extends WallpaperService {
             playlistHandler.removeCallbacks(playlistRunner);
         }
 
+        private void checkLockState() {
+            boolean wasLocked = isLocked;
+            isLocked = keyguardManager != null && keyguardManager.isKeyguardLocked();
+
+            if (isLocked != wasLocked) {
+                switchPlaylistSource();
+            }
+        }
+
+        private void switchPlaylistSource() {
+            if (!isPlaylistMode) return;
+
+            // 備份當前進度
+            if (!wasLocked()) { 
+                homePlaylistIndex = currentPlaylistIndex;
+            } else { 
+                lockPlaylistIndex = currentPlaylistIndex;
+            }
+
+            if (isLocked && !lockPlaylistPaths.isEmpty()) {
+                currentPlaylistPaths = lockPlaylistPaths;
+                currentPlaylistConfigs = lockPlaylistConfigs;
+                currentPlaylistIndex = lockPlaylistIndex;
+            } else {
+                currentPlaylistPaths = homePlaylistPaths;
+                currentPlaylistConfigs = homePlaylistConfigs;
+                currentPlaylistIndex = homePlaylistIndex;
+            }
+
+            // 🔥 安全檢查：如果索引超出範圍，歸零
+            if (currentPlaylistPaths != null && currentPlaylistIndex >= currentPlaylistPaths.size()) {
+                currentPlaylistIndex = 0;
+            }
+
+            // 載入新圖片
+            loadNextImageInternal(currentPlaylistIndex);
+            
+            // 🔥 防黑屏：如果載入失敗 (currentBitmap 為 null) 且現在是鎖定畫面，強制退回主畫面
+            if (currentBitmap == null && isLocked) {
+                currentPlaylistPaths = homePlaylistPaths;
+                currentPlaylistConfigs = homePlaylistConfigs;
+                currentPlaylistIndex = homePlaylistIndex;
+                loadNextImageInternal(currentPlaylistIndex);
+            }
+
+            if (visible) {
+                playlistHandler.removeCallbacks(playlistRunner);
+                if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
+                    playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                }
+            }
+        }
+
+        private boolean wasLocked() {
+            return currentPlaylistPaths == lockPlaylistPaths;
+        }
+
         private void loadSettings() {
             String jsonStr = prefs.getString("settings_json", "{}");
             String singleImagePath = prefs.getString("current_image_path", ""); 
@@ -201,11 +276,9 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 JSONObject json = new JSONObject(jsonStr);
                 
-                // 1. 讀取全域設定
                 if (json.has("scale")) userScale = (float) json.getDouble("scale");
                 if (json.has("motionStrength")) globalMotionStrength = (float) json.getDouble("motionStrength");
                 if (json.has("motionEnabled")) globalMotionEnabled = json.optBoolean("motionEnabled", true);
-                
                 if (json.has("panX")) manualPanX = (float) json.getDouble("panX");
                 if (json.has("panY")) manualPanY = (float) json.getDouble("panY");
                 if (json.has("targetFps")) targetFps = json.optInt("targetFps", 60);
@@ -216,7 +289,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                 String mode = json.optString("mode", "single");
                 isPlaylistMode = "playlist".equals(mode);
 
-                // 2. 初始化目前使用的參數 (預設為全域)
                 currentMotionStrength = globalMotionStrength;
                 currentMotionEnabled = globalMotionEnabled;
 
@@ -224,60 +296,39 @@ public class ParallaxWallpaperService extends WallpaperService {
                     playlistInterval = json.optInt("interval", 60);
                     if (playlistInterval < 5) playlistInterval = 5;
 
-                    playlistPaths.clear();
-                    playlistConfigs.clear(); // 🔥 清除舊設定
+                    homePlaylistPaths.clear();
+                    homePlaylistConfigs.clear();
+                    parsePlaylist(json, "playlist", "playlistConfigs", homePlaylistPaths, homePlaylistConfigs);
 
-                    JSONArray paths = json.optJSONArray("playlist");
-                    // 🔥 嘗試讀取設定陣列
-                    JSONArray configs = json.optJSONArray("playlistConfigs");
-
-                    if (paths != null) {
-                        for (int i = 0; i < paths.length(); i++) {
-                            playlistPaths.add(paths.getString(i));
-                            
-                            // 解析個別設定
-                            PhotoConfig config = new PhotoConfig();
-                            // 預設繼承全域
-                            config.motionStrength = globalMotionStrength;
-                            config.motionEnabled = globalMotionEnabled;
-                            config.scale = 1.1f; // 預設縮放
-
-                            if (configs != null && i < configs.length()) {
-                                JSONObject c = configs.optJSONObject(i);
-                                if (c != null) {
-                                    config.motionStrength = (float) c.optDouble("motionStrength", globalMotionStrength);
-                                    config.motionEnabled = c.optBoolean("motionEnabled", globalMotionEnabled);
-                                    config.scale = (float) c.optDouble("scale", 1.1);
-                                    config.panX = (float) c.optDouble("panX", 0);
-                                    config.panY = (float) c.optDouble("panY", 0);
-                                }
-                            }
-                            playlistConfigs.add(config);
-                        }
+                    lockPlaylistPaths.clear();
+                    lockPlaylistConfigs.clear();
+                    if (json.has("lock_playlist")) {
+                        parsePlaylist(json, "lock_playlist", "lock_playlistConfigs", lockPlaylistPaths, lockPlaylistConfigs);
                     }
+
+                    checkLockState(); 
                     
-                    if (currentBitmap == null && !playlistPaths.isEmpty()) {
+                    if (currentBitmap == null && currentPlaylistPaths != null && !currentPlaylistPaths.isEmpty()) {
                         currentPlaylistIndex = 0;
-                        // 載入第一張並套用其設定
                         loadNextImageInternal(0);
+                    } else {
+                        loadNextImageInternal(currentPlaylistIndex);
                     }
                     
                     if (visible) {
                         playlistHandler.removeCallbacks(playlistRunner);
-                        playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                        if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
+                            playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                        }
                     }
 
                 } else {
-                    // 單張模式直接使用讀到的參數
                     playlistHandler.removeCallbacks(playlistRunner); 
                     if (!singleImagePath.isEmpty()) {
                         loadImage(singleImagePath);
                     }
                 }
 
-                targetGyroX = 0; targetGyroY = 0;
-                currentGyroX = 0; currentGyroY = 0;
-                
                 handleForegroundService();
                 
                 if (visible) {
@@ -290,39 +341,60 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
         }
 
-        private void loadNextImage() {
-            if (playlistPaths.isEmpty()) return;
-            
-            currentPlaylistIndex++;
-            if (currentPlaylistIndex >= playlistPaths.size()) {
-                currentPlaylistIndex = 0;
+        private void parsePlaylist(JSONObject json, String pathKey, String configKey, List<String> pathsList, List<PhotoConfig> configsList) {
+            JSONArray paths = json.optJSONArray(pathKey);
+            JSONArray configs = json.optJSONArray(configKey);
+
+            if (paths != null) {
+                for (int i = 0; i < paths.length(); i++) {
+                    try {
+                        pathsList.add(paths.getString(i));
+                        
+                        PhotoConfig config = new PhotoConfig();
+                        config.motionStrength = globalMotionStrength;
+                        config.motionEnabled = globalMotionEnabled;
+                        config.scale = 1.1f; 
+
+                        if (configs != null && i < configs.length()) {
+                            JSONObject c = configs.optJSONObject(i);
+                            if (c != null) {
+                                config.motionStrength = (float) c.optDouble("motionStrength", globalMotionStrength);
+                                config.motionEnabled = c.optBoolean("motionEnabled", globalMotionEnabled);
+                                config.scale = (float) c.optDouble("scale", 1.1);
+                                config.panX = (float) c.optDouble("panX", 0);
+                                config.panY = (float) c.optDouble("panY", 0);
+                            }
+                        }
+                        configsList.add(config);
+                    } catch (Exception e) {}
+                }
             }
-            
+        }
+
+        private void loadNextImage() {
+            if (currentPlaylistPaths == null || currentPlaylistPaths.isEmpty()) return;
+            currentPlaylistIndex++;
+            if (currentPlaylistIndex >= currentPlaylistPaths.size()) currentPlaylistIndex = 0;
             loadNextImageInternal(currentPlaylistIndex);
         }
 
-        // 🔥 內部方法：載入指定索引的圖片並套用設定
         private void loadNextImageInternal(int index) {
-            if (index < 0 || index >= playlistPaths.size()) return;
-
-            String nextPath = playlistPaths.get(index);
+            if (currentPlaylistPaths == null || index < 0 || index >= currentPlaylistPaths.size()) return;
+            
+            String nextPath = currentPlaylistPaths.get(index);
             loadImage(nextPath);
 
-            // 🔥 套用個別設定
-            if (index < playlistConfigs.size()) {
-                PhotoConfig config = playlistConfigs.get(index);
+            if (currentPlaylistConfigs != null && index < currentPlaylistConfigs.size()) {
+                PhotoConfig config = currentPlaylistConfigs.get(index);
                 currentMotionStrength = config.motionStrength;
                 currentMotionEnabled = config.motionEnabled;
-                userScale = config.scale; // 如果有存 scale 的話
+                userScale = config.scale; 
                 manualPanX = config.panX;
                 manualPanY = config.panY;
             } else {
-                // 回退到全域
                 currentMotionStrength = globalMotionStrength;
                 currentMotionEnabled = globalMotionEnabled;
             }
-            
-            // 重置動量
             targetGyroX = 0; targetGyroY = 0;
             currentGyroX = 0; currentGyroY = 0;
         }
@@ -338,6 +410,9 @@ public class ParallaxWallpaperService extends WallpaperService {
                         }
                         currentBitmap = newBitmap;
                     }
+                } else {
+                    // 檔案不存在，可能是路徑問題
+                    System.out.println("Image file not found: " + path);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -349,23 +424,46 @@ public class ParallaxWallpaperService extends WallpaperService {
                 updateNotificationText(currentNotificationStatus);
             } else {
                 stopForeground(true);
+                showPausedNotification();
             }
         }
 
-        // 🔥 更新通知欄邏輯優化
+        private void showPausedNotification() {
+            ensureChannel();
+            Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+            PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
+            Notification notification = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID)
+                    .setContentTitle("Parallax Wallpaper")
+                    .setContentText("前景運作暫停中") 
+                    .setSmallIcon(android.R.drawable.ic_menu_gallery)
+                    .setContentIntent(pendingIntent)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setOngoing(false) 
+                    .build();
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.notify(NOTIFICATION_ID, notification);
+        }
+
+        private void ensureChannel() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                if (nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
+                    NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Wallpaper Service", NotificationManager.IMPORTANCE_LOW);
+                    nm.createNotificationChannel(channel);
+                }
+            }
+        }
+
         private void updateNotificationText(String status) {
             if (status == null) status = "active";
-            // 統一狀態字串 (active / paused)
             currentNotificationStatus = status.toLowerCase();
 
-            if (!runInBackground) return; // 如果沒開 Keep Alive 就不顯示
-
-            String CHANNEL_ID = "wallpaper_service_channel";
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "Wallpaper Service", NotificationManager.IMPORTANCE_LOW);
-                getSystemService(NotificationManager.class).createNotificationChannel(channel);
+            if (!runInBackground) {
+                showPausedNotification();
+                return; 
             }
-            
+
+            ensureChannel();
             Intent intent = new Intent(getApplicationContext(), MainActivity.class);
             PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
 
@@ -382,11 +480,11 @@ public class ParallaxWallpaperService extends WallpaperService {
                     .setSmallIcon(android.R.drawable.ic_menu_gallery)
                     .setContentIntent(pendingIntent)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setOngoing(true)
+                    .setOngoing(true) 
                     .build();
             
             try {
-                startForeground(1, notification);
+                startForeground(NOTIFICATION_ID, notification);
             } catch (Exception e) {}
         }
 
@@ -394,12 +492,14 @@ public class ParallaxWallpaperService extends WallpaperService {
         public void onVisibilityChanged(boolean visible) {
             this.visible = visible;
             if (visible) {
+                checkLockState();
                 loadSettings(); 
                 updateSensorState();
-                
                 if (isPlaylistMode) {
                     playlistHandler.removeCallbacks(playlistRunner);
-                    playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                    if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
+                        playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                    }
                 }
             } else {
                 updateSensorState();
@@ -409,7 +509,6 @@ public class ParallaxWallpaperService extends WallpaperService {
 
         private void updateSensorState() {
             boolean shouldRun = visible && (!isPowerSaveMode || !pauseOnPowerSave);
-
             if (shouldRun) {
                 sensorManager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME);
                 handler.removeCallbacks(drawRunner);
@@ -445,7 +544,6 @@ public class ParallaxWallpaperService extends WallpaperService {
         private void draw() {
             SurfaceHolder holder = getSurfaceHolder();
             Canvas canvas = null;
-
             try {
                 canvas = holder.lockCanvas();
                 if (canvas != null) {
@@ -458,7 +556,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                     float widthRatio = (float) screenWidth / currentBitmap.getWidth();
                     float heightRatio = (float) screenHeight / currentBitmap.getHeight();
                     float baseScale = Math.max(widthRatio, heightRatio);
-
                     float totalScale = baseScale * this.userScale;
 
                     float scaledImageWidth = currentBitmap.getWidth() * totalScale;
@@ -467,7 +564,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                     float maxDx = (scaledImageWidth - screenWidth) / 2f;
                     float maxDy = (scaledImageHeight - screenHeight) / 2f;
 
-                    // 🔥 使用 currentMotionEnabled 和 currentMotionStrength (動態切換)
                     if (currentMotionEnabled && currentMotionStrength > 0) {
                         currentGyroX += (targetGyroX - currentGyroX) * SMOOTHING_FACTOR;
                         currentGyroY += (targetGyroY - currentGyroY) * SMOOTHING_FACTOR;
@@ -483,12 +579,10 @@ public class ParallaxWallpaperService extends WallpaperService {
                     float finalOffsetY = Math.max(-maxDy, Math.min(totalOffsetY, maxDy));
 
                     canvas.drawColor(Color.BLACK); 
-
                     Matrix matrix = new Matrix();
                     matrix.postTranslate(-currentBitmap.getWidth() / 2f, -currentBitmap.getHeight() / 2f);
                     matrix.postScale(totalScale, totalScale);
                     matrix.postTranslate((screenWidth / 2f) + finalOffsetX, (screenHeight / 2f) + finalOffsetY);
-
                     canvas.drawBitmap(currentBitmap, matrix, null);
                 }
             } catch (Exception e) {
@@ -498,9 +592,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
 
             handler.removeCallbacks(drawRunner);
-            
             boolean shouldAnimate = visible && (!isPowerSaveMode || !pauseOnPowerSave);
-            
             if (shouldAnimate) {
                 long delay = 1000 / Math.max(1, targetFps); 
                 handler.postDelayed(drawRunner, delay);

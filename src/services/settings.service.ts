@@ -1,32 +1,27 @@
 import { Injectable, signal, effect, computed, NgZone, inject } from '@angular/core';
 
+export type SortOrder = 'name_asc' | 'name_desc' | 'date_asc' | 'date_desc' | 'random' | 'custom';
 export type ThumbnailShape = 'squircle' | 'square' | 'rounded' | 'circle' | 'bevel' | 'leaf' | 'hexagon' | 'diamond';
 
 export interface AppSettings {
-  targetFps: number; // 30, 60, 90, 120
-  
-  // Logic: Pauses rotation when system reports power save mode
+  targetFps: number; 
   pauseOnPowerSave: boolean;
-  
-  // Logic: Reduces CSS animations/blur effects to save GPU
   batteryOptimization: boolean; 
-  
-  // Logic: Tells Android to run as Foreground Service (Notification + Boot Start)
   runInBackground: boolean;
-
   globalMotionStrength: number;
   globalMotionEnabled: boolean;
-  
-  // New Visual Settings
   thumbnailShape: ThumbnailShape;
   thumbnailGap: number;
-  
-  // Interaction Settings
   doubleTapToChange: boolean;
 
-  // 🔥 [NEW] 僅新增資料欄位，不更動邏輯
+  // 資料欄位
+  playlist?: string[];
+  playlistConfigs?: any[];
   lock_playlist?: string[];
   lock_playlistConfigs?: any[];
+  mode?: string;
+  interval?: number;
+  sortOrder?: SortOrder;
 }
 
 @Injectable({
@@ -35,78 +30,69 @@ export interface AppSettings {
 export class SettingsService {
   private zone = inject(NgZone);
 
-  // Reactive state for the System's actual Power Save status (pushed from Android)
   isSystemPowerSave = signal(false);
 
-  // 🔥 1. 更新預設值 (Defaults Updated)
   settings = signal<AppSettings>({
     targetFps: 120,
-    pauseOnPowerSave: true,       // 預設開啟
-    batteryOptimization: false,   // 預設關閉 (Reduced Motion)
-    runInBackground: true,        // 預設開啟 (Keep Alive)
-    globalMotionStrength: 2.0,    // 預設 2x
-    globalMotionEnabled: true,    // 預設開啟
+    pauseOnPowerSave: true,       
+    batteryOptimization: false,   
+    runInBackground: true,        
+    globalMotionStrength: 2.0,    
+    globalMotionEnabled: true,    
     thumbnailShape: 'squircle',
-    thumbnailGap: 8,              // 預設 8px
-    doubleTapToChange: false,     // 預設關閉
-
-    // 🔥 [NEW] 初始化
+    thumbnailGap: 8,              
+    doubleTapToChange: false,     
+    playlist: [],
+    playlistConfigs: [],
     lock_playlist: [],
-    lock_playlistConfigs: []
+    lock_playlistConfigs: [],
+    mode: 'single',
+    interval: 60,
+    sortOrder: 'custom'
   });
 
-  // CENTRAL LOGIC: Are we actually paused right now?
-  // Returns true ONLY IF: "Pause on Power Save" is ON AND "System Power Save" is ACTIVE.
   isEffectivelyPaused = computed(() => {
       return this.settings().pauseOnPowerSave && this.isSystemPowerSave();
   });
 
   constructor() {
-    // 🔥 2. 註冊 Native 呼叫接口 (Expose to Native)
-    // 讓 Android Java 端可以呼叫 window.updatePowerSaveMode(true/false)
+    // 1. Power Save Sync
     (window as any).updatePowerSaveMode = (isActive: boolean) => {
-        console.log('[Web] Received Power Save Update:', isActive);
-        // 使用 NgZone 確保 Angular 偵測到這個外部變更
         this.zone.run(() => {
-            this.setSystemPowerSave(isActive);
+            if (this.isSystemPowerSave() !== isActive) {
+                this.setSystemPowerSave(isActive);
+            }
         });
     };
 
-    // Attempt to load from localStorage
+    // ❌ 已移除 updateKeepAliveUI，避免無限迴圈
+
+    // 2. Load
     const saved = localStorage.getItem('app_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // 合併儲存的設定與新的預設值 (確保新增的欄位有預設值)
         this.settings.set({ ...this.settings(), ...parsed });
       } catch (e) {
         console.warn('Failed to parse settings', e);
       }
     }
 
-    // Auto-save & Sync to Native
+    // 3. Auto-save
     effect(() => {
       const json = JSON.stringify(this.settings());
       localStorage.setItem('app_settings', json);
-      
-      // Native Bridge Call 1: Update Settings Data
       if ((window as any).Android && (window as any).Android.updateSettings) {
           (window as any).Android.updateSettings(json);
       }
     });
 
-    // Effect: Update Notification Text based on "Effectively Paused" state
+    // 4. Notification
     effect(() => {
         const isPaused = this.isEffectivelyPaused();
-        
-        // Native Bridge Call 2: Update Service Notification Text
-        // If paused, Android should show "Paused in Power Save"
-        // If running, Android should show "Parallax Studio Running" or "Playlist Active"
         if ((window as any).Android && (window as any).Android.updateServiceNotification) {
             (window as any).Android.updateServiceNotification(isPaused ? 'paused' : 'active');
         }
-        
-        // console.log(`[App State] Effectively Paused: ${isPaused}`);
     });
   }
 
@@ -114,7 +100,6 @@ export class SettingsService {
     this.settings.update(current => ({ ...current, ...partial }));
   }
 
-  // Method called by Native Android when system power save toggles
   setSystemPowerSave(isActive: boolean) {
     this.isSystemPowerSave.set(isActive);
   }

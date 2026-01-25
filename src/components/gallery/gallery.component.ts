@@ -1204,144 +1204,149 @@ export class GalleryComponent {
   }
 
   // 🔥🔥 核心：根據使用者選擇 (Home / Lock / Both) 來決定資料寫入位置
-  async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
-      const playlist = this.activePlaylist();
-      if (!playlist || playlist.photoIds.length === 0) {
-        this.showToast('錯誤：播放清單是空的');
-        return;
-      }
+// 🔥🔥 修正版：透過 SettingsService 統一存檔，避免資料被清空
+async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
+  const playlist = this.activePlaylist();
+  if (!playlist || playlist.photoIds.length === 0) {
+    this.showToast('錯誤：播放清單是空的');
+    return;
+  }
 
-      this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片 (${type.toUpperCase()})`);
+  this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片 (${type.toUpperCase()})`);
 
-      try {
-          const playlistPaths: string[] = [];
-          const playlistConfigs: any[] = []; 
-          let newFilesCount = 0;
+  try {
+      const playlistPaths: string[] = [];
+      const playlistConfigs: any[] = []; 
+      let newFilesCount = 0;
 
-          // ... (圖片處理與快取邏輯保持不變) ...
-          for (let i = 0; i < playlist.photoIds.length; i++) {
-              const photoId = playlist.photoIds[i];
-              const photo = this.getPhotoById(photoId);
-              if (!photo) continue;
+      // --- 圖片處理迴圈 (保持不變) ---
+      for (let i = 0; i < playlist.photoIds.length; i++) {
+          const photoId = playlist.photoIds[i];
+          const photo = this.getPhotoById(photoId);
+          if (!photo) continue;
 
-              const specificConfig = {
-                  motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
-                  motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
-                  scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
-                  panX: photo.viewSettings ? photo.viewSettings.panX : 0,
-                  panY: photo.viewSettings ? photo.viewSettings.panY : 0
-              };
-              playlistConfigs.push(specificConfig);
+          // 建立個別設定
+          const specificConfig = {
+              motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
+              motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
+              scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
+              panX: photo.viewSettings ? photo.viewSettings.panX : 0,
+              panY: photo.viewSettings ? photo.viewSettings.panY : 0
+          };
+          playlistConfigs.push(specificConfig);
 
-              const fileName = `cached_${photoId}.jpg`;
-              
+          const fileName = `cached_${photoId}.jpg`;
+          
+          // 檢查快取
+          try {
+              const stat = await Filesystem.stat({
+                  path: fileName,
+                  directory: Directory.Data
+              });
+              playlistPaths.push(stat.uri.replace('file://', ''));
+              continue; 
+          } catch (e) { }
+
+          // 複製或轉換檔案
+          const sourcePath = (photo as any).path || (photo as any).webPath;
+          let copySuccess = false;
+          if (sourcePath && sourcePath.startsWith('file://')) {
               try {
+                  await Filesystem.copy({
+                      from: sourcePath,
+                      to: fileName,
+                      toDirectory: Directory.Data
+                  });
+                  // 取得新路徑
                   const stat = await Filesystem.stat({
                       path: fileName,
                       directory: Directory.Data
                   });
                   playlistPaths.push(stat.uri.replace('file://', ''));
-                  continue; 
-              } catch (e) { }
-
-              const sourcePath = (photo as any).path || (photo as any).webPath;
-              let copySuccess = false;
-              if (sourcePath && sourcePath.startsWith('file://')) {
-                  try {
-                      await Filesystem.copy({
-                          from: sourcePath,
-                          to: fileName,
-                          toDirectory: Directory.Data
-                      });
-                      const stat = await Filesystem.stat({
-                          path: fileName,
-                          directory: Directory.Data
-                      });
-                      playlistPaths.push(stat.uri.replace('file://', ''));
-                      copySuccess = true;
-                  } catch (copyError) {}
-              }
-
-              if (!copySuccess) {
-                  let base64Data: string;
-                  if (sourcePath) {
-                      const file = await Filesystem.readFile({ path: sourcePath });
-                      base64Data = file.data as string;
-                  } else if (photo.url) {
-                      const response = await fetch(photo.url);
-                      const blob = await response.blob();
-                      base64Data = await this.blobToBase64(blob);
-                  } else {
-                      continue;
-                  }
-
-                  const savedFile = await Filesystem.writeFile({
-                    path: fileName,
-                    data: base64Data,
-                    directory: Directory.Data,
-                    recursive: true
-                  });
-                  playlistPaths.push(savedFile.uri.replace('file://', ''));
-              }
-              
-              newFilesCount++;
-              if (newFilesCount % 10 === 0) {
-                  this.showToast(`正在最佳化新照片... (${newFilesCount})`);
-              }
+                  copySuccess = true;
+              } catch (copyError) {}
           }
 
-          if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
+          if (!copySuccess) {
+              let base64Data: string;
+              if (sourcePath) {
+                  const file = await Filesystem.readFile({ path: sourcePath });
+                  base64Data = file.data as string;
+              } else if (photo.url) {
+                  const response = await fetch(photo.url);
+                  const blob = await response.blob();
+                  base64Data = await this.blobToBase64(blob);
+              } else {
+                  continue;
+              }
 
-          // 🔥 讀取舊設定
-          let currentConfigStr = localStorage.getItem('LIVE_WALLPAPER_CONFIG');
-          let currentConfig = currentConfigStr ? JSON.parse(currentConfigStr) : {};
-
-          // 🔥 根據 type 更新對應欄位
-          if (type === 'home' || type === 'both') {
-              currentConfig.playlist = playlistPaths;
-              currentConfig.playlistConfigs = playlistConfigs;
+              const savedFile = await Filesystem.writeFile({
+                path: fileName,
+                data: base64Data,
+                directory: Directory.Data,
+                recursive: true
+              });
+              playlistPaths.push(savedFile.uri.replace('file://', ''));
           }
-          if (type === 'lock' || type === 'both') {
-              currentConfig.lock_playlist = playlistPaths;
-              currentConfig.lock_playlistConfigs = playlistConfigs;
-          }
-
-          // 更新共用參數
-          currentConfig.mode = 'playlist';
-          currentConfig.interval = playlist.interval || 60;
-          currentConfig.sortOrder = playlist.sortOrder;
-          // 其他參數繼承全域設定
-          currentConfig.motionEnabled = this.settings.settings().globalMotionEnabled;
-          currentConfig.motionStrength = this.settings.settings().globalMotionStrength;
-          currentConfig.targetFps = this.settings.settings().targetFps;
-          currentConfig.doubleTapToChange = this.settings.settings().doubleTapToChange;
           
-          const jsonConfig = JSON.stringify(currentConfig);
-          localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonConfig);
-
-          if ((window as any).Android) {
-              if ((window as any).Android.updateSettings) {
-                 (window as any).Android.updateSettings(jsonConfig);
-              }
-              if ((window as any).Android.setWallpaper) {
-                  // 注意：這裡只會觸發一次桌布重設，Service 會自己去讀取 jsonConfig 並決定顯示什麼
-                  (window as any).Android.setWallpaper(playlistPaths[0]);
-                  
-                  if (newFilesCount === 0) {
-                      this.showToast('設定成功！(秒速套用)');
-                  } else {
-                      this.showToast(`成功！已設定 ${playlistPaths.length} 張輪播桌布`);
-                  }
-              }
-          } else {
-              this.showToast('已儲存 (Bridge Inactive)');
+          newFilesCount++;
+          if (newFilesCount % 10 === 0) {
+              this.showToast(`正在最佳化新照片... (${newFilesCount})`);
           }
-
-      } catch (e) {
-          console.error(e);
-          this.showToast('設定失敗: ' + (e as any).message);
       }
+
+      if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
+
+      // 🔥🔥🔥 關鍵修正開始 🔥🔥🔥
+      // 不再使用 localStorage.setItem('LIVE_WALLPAPER_CONFIG')
+      // 改用 SettingsService 更新，讓它成為唯一的資料來源 (Single Source of Truth)
+
+      const updatePayload: any = {
+          // 這裡使用 any 是為了繞過 AppSettings 可能還沒定義 interval/mode 的檢查
+          // 這樣可以確保這些欄位依然會被存入 JSON 並傳給 Android
+          mode: 'playlist',
+          interval: playlist.interval || 60,
+          sortOrder: playlist.sortOrder,
+          // 強制更新全域參數以符合當前清單
+          motionEnabled: this.settings.settings().globalMotionEnabled,
+          motionStrength: this.settings.settings().globalMotionStrength,
+          targetFps: this.settings.settings().targetFps,
+          doubleTapToChange: this.settings.settings().doubleTapToChange
+      };
+
+      // 根據類型寫入對應欄位
+      if (type === 'home' || type === 'both') {
+          updatePayload.playlist = playlistPaths;
+          updatePayload.playlistConfigs = playlistConfigs;
+      }
+      
+      if (type === 'lock' || type === 'both') {
+          updatePayload.lock_playlist = playlistPaths;
+          updatePayload.lock_playlistConfigs = playlistConfigs;
+      }
+
+      // 1. 呼叫 Service 更新 (這會自動觸發 effect -> 儲存至 app_settings -> 通知 Android 更新 JSON)
+      this.settings.updateSettings(updatePayload);
+
+      // 2. 觸發 Android 桌布重整 (這一步是為了確保 Service 立即讀取新設定並重繪)
+      if ((window as any).Android && (window as any).Android.setWallpaper) {
+          // 傳送第一張圖路徑是為了觸發 Service 的重繪機制
+          (window as any).Android.setWallpaper(playlistPaths[0]);
+          
+          if (newFilesCount === 0) {
+              this.showToast('設定成功！(秒速套用)');
+          } else {
+              this.showToast(`成功！已設定 ${playlistPaths.length} 張輪播桌布`);
+          }
+      } else {
+          this.showToast('已儲存 (Bridge Inactive)');
+      }
+
+  } catch (e) {
+      console.error(e);
+      this.showToast('設定失敗: ' + (e as any).message);
   }
+}
 
   formatSortOrder(order: SortOrder | undefined): string {
       switch(order) {

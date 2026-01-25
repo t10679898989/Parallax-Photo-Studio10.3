@@ -3,11 +3,9 @@ package com.myparallax.app;
 import android.Manifest;
 import android.app.Activity;
 import android.app.WallpaperManager;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -20,7 +18,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
-import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -37,16 +34,6 @@ public class MainActivity extends BridgeActivity {
     private ActivityResultLauncher<Intent> restoreLauncher;
     private ActivityResultLauncher<String[]> permissionLauncher;
     private String pendingBackupData = null;
-
-    // 廣播接收器：處理即時同步 (當 App 在前景時)
-    private final BroadcastReceiver tileSyncReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if ("com.myparallax.app.ACTION_UPDATE_WALLPAPER".equals(intent.getAction())) {
-                syncKeepAliveState();
-            }
-        }
-    };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -91,51 +78,9 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         );
-
-        // 註冊廣播接收器
-        IntentFilter filter = new IntentFilter("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            registerReceiver(tileSyncReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(tileSyncReceiver, filter);
-        }
     }
 
-    // 🔥 新增：當 App 回到前景時 (例如收起通知欄)，強制同步一次狀態
-    @Override
-    public void onResume() {
-        super.onResume();
-        syncKeepAliveState();
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        try {
-            unregisterReceiver(tileSyncReceiver);
-        } catch (Exception e) {}
-    }
-
-    // 同步狀態到 Web 端的核心方法
-    private void syncKeepAliveState() {
-        SharedPreferences sharedPref = getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
-        String jsonStr = sharedPref.getString("settings_json", "{}");
-        boolean isKeepAlive = false;
-        try {
-            JSONObject json = new JSONObject(jsonStr);
-            isKeepAlive = json.optBoolean("runInBackground", false);
-        } catch (Exception e) {}
-
-        boolean finalState = isKeepAlive;
-        runOnUiThread(() -> {
-            WebView webView = this.getBridge().getWebView();
-            if (webView != null) {
-                // 這裡會呼叫 Angular 的 window.updateKeepAliveUI
-                webView.evaluateJavascript("if(window.updateKeepAliveUI) window.updateKeepAliveUI(" + finalState + ");", null);
-            }
-        });
-    }
-
+    // 乾淨的權限檢查
     private void checkPermissions() {
         List<String> perms = new ArrayList<>();
 
@@ -148,7 +93,7 @@ public class MainActivity extends BridgeActivity {
                     perms.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED);
                 }
             }
-            // 請求通知權限
+            // 請求通知權限 (為了 Keep Alive)
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.POST_NOTIFICATIONS);
             }
@@ -220,7 +165,10 @@ public class MainActivity extends BridgeActivity {
         public void updateSettings(String jsonSettings) {
             SharedPreferences sharedPref = mContext.getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
             sharedPref.edit().putString("settings_json", jsonSettings).commit();
-            sendUpdateBroadcast();
+            // 通知 Service 更新 (單向)
+            Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
+            intent.setPackage(mContext.getPackageName());
+            mContext.sendBroadcast(intent);
         }
         
         @JavascriptInterface
@@ -229,24 +177,26 @@ public class MainActivity extends BridgeActivity {
              boolean success = sharedPref.edit().putString("current_image_path", imagePath).commit();
              
              if (success) {
-                 sendUpdateBroadcast();
+                 Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
+                 intent.setPackage(mContext.getPackageName());
+                 mContext.sendBroadcast(intent);
+
                  runOnUiThread(() -> {
                      try {
                          WallpaperManager wm = WallpaperManager.getInstance(mContext);
                          if (wm.getWallpaperInfo() == null || 
                              !wm.getWallpaperInfo().getPackageName().equals(mContext.getPackageName())) {
                              Toast.makeText(mContext, "請選擇「Parallax Studio」並套用", Toast.LENGTH_LONG).show();
-                             Intent intent = new Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER);
-                             intent.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                             Intent intent2 = new Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER);
+                             intent2.putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
                                  new ComponentName(mContext, ParallaxWallpaperService.class));
-                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                             mContext.startActivity(intent);
+                             intent2.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                             mContext.startActivity(intent2);
                          } else {
                              Toast.makeText(mContext, "桌布已更新", Toast.LENGTH_SHORT).show();
                          }
                      } catch (Exception e) {
                          e.printStackTrace();
-                         Toast.makeText(mContext, "無法開啟設定", Toast.LENGTH_SHORT).show();
                      }
                  });
              }
@@ -274,12 +224,6 @@ public class MainActivity extends BridgeActivity {
         public void updateServiceNotification(String status) {
             Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_NOTIFICATION");
             intent.putExtra("status", status); 
-            intent.setPackage(mContext.getPackageName());
-            mContext.sendBroadcast(intent);
-        }
-
-        private void sendUpdateBroadcast() {
-            Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
             intent.setPackage(mContext.getPackageName());
             mContext.sendBroadcast(intent);
         }

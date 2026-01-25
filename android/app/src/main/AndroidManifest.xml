@@ -63,17 +63,6 @@
                 android:resource="@xml/wallpaper" />
         </service>
         
-        <service
-            android:name=".KeepAliveTileService"
-            android:icon="@mipmap/ic_launcher"
-            android:label="Keep Alive"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
-        
     </application>
 
 </manifest>
