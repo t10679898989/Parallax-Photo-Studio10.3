@@ -111,9 +111,9 @@ public class ParallaxWallpaperService extends WallpaperService {
                 } else if ("com.myparallax.app.ACTION_UPDATE_NOTIFICATION".equals(action)) {
                     String status = intent.getStringExtra("status");
                     updateNotificationText(status);
-                } else if (Intent.ACTION_USER_PRESENT.equals(action)) {
-                    checkLockState();
-                } else if (Intent.ACTION_SCREEN_OFF.equals(action) || Intent.ACTION_SCREEN_ON.equals(action)) {
+                } else if (Intent.ACTION_USER_PRESENT.equals(action) || 
+                           Intent.ACTION_SCREEN_OFF.equals(action) || 
+                           Intent.ACTION_SCREEN_ON.equals(action)) {
                     checkLockState();
                 }
             }
@@ -164,6 +164,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
             prefs = getSharedPreferences("WallpaperPrefs", MODE_PRIVATE);
 
+            // 預設先指向 Home
             currentPlaylistPaths = homePlaylistPaths;
             currentPlaylistConfigs = homePlaylistConfigs;
 
@@ -224,39 +225,20 @@ public class ParallaxWallpaperService extends WallpaperService {
         private void switchPlaylistSource() {
             if (!isPlaylistMode) return;
 
-            // 備份當前進度
+            // 1. 保存當前進度
             if (!wasLocked()) { 
                 homePlaylistIndex = currentPlaylistIndex;
             } else { 
                 lockPlaylistIndex = currentPlaylistIndex;
             }
 
-            if (isLocked && !lockPlaylistPaths.isEmpty()) {
-                currentPlaylistPaths = lockPlaylistPaths;
-                currentPlaylistConfigs = lockPlaylistConfigs;
-                currentPlaylistIndex = lockPlaylistIndex;
-            } else {
-                currentPlaylistPaths = homePlaylistPaths;
-                currentPlaylistConfigs = homePlaylistConfigs;
-                currentPlaylistIndex = homePlaylistIndex;
-            }
+            // 2. 決定新的資料來源
+            resolvePlaylistSource();
 
-            // 🔥 安全檢查：如果索引超出範圍，歸零
-            if (currentPlaylistPaths != null && currentPlaylistIndex >= currentPlaylistPaths.size()) {
-                currentPlaylistIndex = 0;
-            }
-
-            // 載入新圖片
+            // 3. 載入圖片
             loadNextImageInternal(currentPlaylistIndex);
             
-            // 🔥 防黑屏：如果載入失敗 (currentBitmap 為 null) 且現在是鎖定畫面，強制退回主畫面
-            if (currentBitmap == null && isLocked) {
-                currentPlaylistPaths = homePlaylistPaths;
-                currentPlaylistConfigs = homePlaylistConfigs;
-                currentPlaylistIndex = homePlaylistIndex;
-                loadNextImageInternal(currentPlaylistIndex);
-            }
-
+            // 4. 重啟輪播
             if (visible) {
                 playlistHandler.removeCallbacks(playlistRunner);
                 if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
@@ -265,7 +247,43 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
         }
 
+        // 🔥 核心修正：智慧切換邏輯 (Smart Fallback)
+        // 如果原本該顯示的清單是空的，就去借用另一邊的，防止黑屏
+        private void resolvePlaylistSource() {
+            if (isLocked) {
+                // 鎖定時：優先用 Lock，沒有則用 Home
+                if (!lockPlaylistPaths.isEmpty()) {
+                    currentPlaylistPaths = lockPlaylistPaths;
+                    currentPlaylistConfigs = lockPlaylistConfigs;
+                    currentPlaylistIndex = lockPlaylistIndex;
+                } else {
+                    currentPlaylistPaths = homePlaylistPaths;
+                    currentPlaylistConfigs = homePlaylistConfigs;
+                    currentPlaylistIndex = homePlaylistIndex;
+                }
+            } else {
+                // 解鎖時：優先用 Home，沒有則用 Lock (解決只設定鎖定時預覽黑屏的問題)
+                if (!homePlaylistPaths.isEmpty()) {
+                    currentPlaylistPaths = homePlaylistPaths;
+                    currentPlaylistConfigs = homePlaylistConfigs;
+                    currentPlaylistIndex = homePlaylistIndex;
+                } else {
+                    currentPlaylistPaths = lockPlaylistPaths;
+                    currentPlaylistConfigs = lockPlaylistConfigs;
+                    currentPlaylistIndex = lockPlaylistIndex;
+                }
+            }
+
+            // 安全檢查：防止 index 超出範圍
+            if (currentPlaylistPaths != null && !currentPlaylistPaths.isEmpty()) {
+                if (currentPlaylistIndex >= currentPlaylistPaths.size()) {
+                    currentPlaylistIndex = 0;
+                }
+            }
+        }
+
         private boolean wasLocked() {
+            // 簡單判斷：如果當前指標指向 Lock 清單，代表剛剛是鎖定狀態
             return currentPlaylistPaths == lockPlaylistPaths;
         }
 
@@ -276,6 +294,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 JSONObject json = new JSONObject(jsonStr);
                 
+                // --- 通用設定 ---
                 if (json.has("scale")) userScale = (float) json.getDouble("scale");
                 if (json.has("motionStrength")) globalMotionStrength = (float) json.getDouble("motionStrength");
                 if (json.has("motionEnabled")) globalMotionEnabled = json.optBoolean("motionEnabled", true);
@@ -306,12 +325,14 @@ public class ParallaxWallpaperService extends WallpaperService {
                         parsePlaylist(json, "lock_playlist", "lock_playlistConfigs", lockPlaylistPaths, lockPlaylistConfigs);
                     }
 
-                    checkLockState(); 
+                    // 重新決定當前要顯示什麼 (包含 Fallback 邏輯)
+                    resolvePlaylistSource();
                     
                     if (currentBitmap == null && currentPlaylistPaths != null && !currentPlaylistPaths.isEmpty()) {
-                        currentPlaylistIndex = 0;
-                        loadNextImageInternal(0);
+                        // 第一次載入
+                        loadNextImageInternal(currentPlaylistIndex);
                     } else {
+                        // 重新整理 (例如設定改變)
                         loadNextImageInternal(currentPlaylistIndex);
                     }
                     
@@ -410,9 +431,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                         }
                         currentBitmap = newBitmap;
                     }
-                } else {
-                    // 檔案不存在，可能是路徑問題
-                    System.out.println("Image file not found: " + path);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
