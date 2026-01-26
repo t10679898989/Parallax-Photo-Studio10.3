@@ -19,9 +19,14 @@ export interface AppSettings {
   playlistConfigs?: any[];
   lock_playlist?: string[];
   lock_playlistConfigs?: any[];
+  
   mode?: string;
-  interval?: number;
   sortOrder?: SortOrder;
+
+  // 🔥 [FIX] 拆分間隔設定，解決秒數互蓋問題
+  home_interval?: number; // 主畫面秒數
+  lock_interval?: number; // 鎖定畫面秒數
+  interval?: number;      // (保留作為單圖或其他用途的 fallback)
 }
 
 @Injectable({
@@ -48,7 +53,11 @@ export class SettingsService {
     lock_playlistConfigs: [],
     mode: 'single',
     interval: 60,
-    sortOrder: 'custom'
+    sortOrder: 'custom',
+    
+    // 🔥 初始化
+    home_interval: 60,
+    lock_interval: 60
   });
 
   isEffectivelyPaused = computed(() => {
@@ -56,7 +65,6 @@ export class SettingsService {
   });
 
   constructor() {
-    // 1. Power Save Sync
     (window as any).updatePowerSaveMode = (isActive: boolean) => {
         this.zone.run(() => {
             if (this.isSystemPowerSave() !== isActive) {
@@ -65,9 +73,6 @@ export class SettingsService {
         });
     };
 
-    // ❌ 已移除 updateKeepAliveUI，避免無限迴圈
-
-    // 2. Load
     const saved = localStorage.getItem('app_settings');
     if (saved) {
       try {
@@ -78,7 +83,6 @@ export class SettingsService {
       }
     }
 
-    // 3. Auto-save
     effect(() => {
       const json = JSON.stringify(this.settings());
       localStorage.setItem('app_settings', json);
@@ -87,7 +91,6 @@ export class SettingsService {
       }
     });
 
-    // 4. Notification
     effect(() => {
         const isPaused = this.isEffectivelyPaused();
         if ((window as any).Android && (window as any).Android.updateServiceNotification) {

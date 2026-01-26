@@ -1203,8 +1203,7 @@ export class GalleryComponent {
     });
   }
 
-  // 🔥🔥 核心：根據使用者選擇 (Home / Lock / Both) 來決定資料寫入位置
-// 🔥🔥 修正版：透過 SettingsService 統一存檔，避免資料被清空
+// 🔥🔥🔥 修正版：支援獨立秒數設定 (Home/Lock 分開存)
 async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
   const playlist = this.activePlaylist();
   if (!playlist || playlist.photoIds.length === 0) {
@@ -1219,13 +1218,13 @@ async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
       const playlistConfigs: any[] = []; 
       let newFilesCount = 0;
 
-      // --- 圖片處理迴圈 (保持不變) ---
+      // --- 1. 圖片處理迴圈 (檢查快取、複製檔案) ---
       for (let i = 0; i < playlist.photoIds.length; i++) {
           const photoId = playlist.photoIds[i];
           const photo = this.getPhotoById(photoId);
           if (!photo) continue;
 
-          // 建立個別設定
+          // 建立個別設定 (Motion/Scale)
           const specificConfig = {
               motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
               motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
@@ -1237,7 +1236,7 @@ async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
 
           const fileName = `cached_${photoId}.jpg`;
           
-          // 檢查快取
+          // 檢查快取是否存在
           try {
               const stat = await Filesystem.stat({
                   path: fileName,
@@ -1247,9 +1246,11 @@ async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
               continue; 
           } catch (e) { }
 
-          // 複製或轉換檔案
+          // 準備來源路徑
           const sourcePath = (photo as any).path || (photo as any).webPath;
           let copySuccess = false;
+
+          // 嘗試直接複製 (效能較好)
           if (sourcePath && sourcePath.startsWith('file://')) {
               try {
                   await Filesystem.copy({
@@ -1257,7 +1258,6 @@ async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
                       to: fileName,
                       toDirectory: Directory.Data
                   });
-                  // 取得新路徑
                   const stat = await Filesystem.stat({
                       path: fileName,
                       directory: Directory.Data
@@ -1267,6 +1267,7 @@ async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
               } catch (copyError) {}
           }
 
+          // 如果複製失敗 (例如來自 Web 或相簿 URI)，則讀取並寫入
           if (!copySuccess) {
               let base64Data: string;
               if (sourcePath) {
@@ -1297,15 +1298,14 @@ async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
 
       if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
 
-      // 🔥🔥🔥 關鍵修正開始 🔥🔥🔥
-      // 不再使用 localStorage.setItem('LIVE_WALLPAPER_CONFIG')
-      // 改用 SettingsService 更新，讓它成為唯一的資料來源 (Single Source of Truth)
+      // --- 2. 準備設定 Payload ---
+      
+      // 取得當前清單設定的秒數
+      const newInterval = playlist.interval || 60;
 
       const updatePayload: any = {
-          // 這裡使用 any 是為了繞過 AppSettings 可能還沒定義 interval/mode 的檢查
-          // 這樣可以確保這些欄位依然會被存入 JSON 並傳給 Android
           mode: 'playlist',
-          interval: playlist.interval || 60,
+          // 注意：不再寫入全域 interval，改寫入下方的 home_interval / lock_interval
           sortOrder: playlist.sortOrder,
           // 強制更新全域參數以符合當前清單
           motionEnabled: this.settings.settings().globalMotionEnabled,
@@ -1314,21 +1314,24 @@ async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
           doubleTapToChange: this.settings.settings().doubleTapToChange
       };
 
-      // 根據類型寫入對應欄位
+      // --- 3. 根據類型寫入對應欄位 (包含路徑與秒數) ---
+      
       if (type === 'home' || type === 'both') {
           updatePayload.playlist = playlistPaths;
           updatePayload.playlistConfigs = playlistConfigs;
+          updatePayload.home_interval = newInterval; // 🔥 寫入主畫面秒數
       }
       
       if (type === 'lock' || type === 'both') {
           updatePayload.lock_playlist = playlistPaths;
           updatePayload.lock_playlistConfigs = playlistConfigs;
+          updatePayload.lock_interval = newInterval; // 🔥 寫入鎖定畫面秒數
       }
 
-      // 1. 呼叫 Service 更新 (這會自動觸發 effect -> 儲存至 app_settings -> 通知 Android 更新 JSON)
+      // --- 4. 透過 Service 統一更新 (存檔 + 通知) ---
       this.settings.updateSettings(updatePayload);
 
-      // 2. 觸發 Android 桌布重整 (這一步是為了確保 Service 立即讀取新設定並重繪)
+      // --- 5. 觸發 Android 桌布重整 ---
       if ((window as any).Android && (window as any).Android.setWallpaper) {
           // 傳送第一張圖路徑是為了觸發 Service 的重繪機制
           (window as any).Android.setWallpaper(playlistPaths[0]);

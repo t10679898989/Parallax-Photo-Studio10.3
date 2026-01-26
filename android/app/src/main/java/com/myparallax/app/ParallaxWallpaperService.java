@@ -77,16 +77,18 @@ public class ParallaxWallpaperService extends WallpaperService {
         private List<String> homePlaylistPaths = new ArrayList<>();
         private List<PhotoConfig> homePlaylistConfigs = new ArrayList<>();
         private int homePlaylistIndex = 0;
+        private int homeInterval = 60; // 🔥 新增：主畫面秒數
 
         private List<String> lockPlaylistPaths = new ArrayList<>();
         private List<PhotoConfig> lockPlaylistConfigs = new ArrayList<>();
         private int lockPlaylistIndex = 0;
+        private int lockInterval = 60; // 🔥 新增：鎖定畫面秒數
 
         private List<String> currentPlaylistPaths; 
         private List<PhotoConfig> currentPlaylistConfigs;
         private int currentPlaylistIndex = 0;
 
-        private int playlistInterval = 60; 
+        private int currentInterval = 60; // 🔥 當前使用的秒數
         
         private float globalMotionStrength = 1.0f; 
         private float currentMotionStrength = 1.0f; 
@@ -150,7 +152,7 @@ public class ParallaxWallpaperService extends WallpaperService {
             public void run() {
                 if (visible && isPlaylistMode && currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
                     loadNextImage();
-                    playlistHandler.postDelayed(this, playlistInterval * 1000L);
+                    playlistHandler.postDelayed(this, currentInterval * 1000L);
                 }
             }
         };
@@ -164,7 +166,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             keyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
             prefs = getSharedPreferences("WallpaperPrefs", MODE_PRIVATE);
 
-            // 預設先指向 Home
             currentPlaylistPaths = homePlaylistPaths;
             currentPlaylistConfigs = homePlaylistConfigs;
 
@@ -174,7 +175,7 @@ public class ParallaxWallpaperService extends WallpaperService {
                     if (doubleTapToChange && isPlaylistMode && currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
                         loadNextImage();
                         playlistHandler.removeCallbacks(playlistRunner);
-                        playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                        playlistHandler.postDelayed(playlistRunner, currentInterval * 1000L);
                         return true;
                     }
                     return super.onDoubleTap(e);
@@ -213,11 +214,14 @@ public class ParallaxWallpaperService extends WallpaperService {
             playlistHandler.removeCallbacks(playlistRunner);
         }
 
+        // 🔥 核心修正：強制檢查狀態，避免卡頓
         private void checkLockState() {
-            boolean wasLocked = isLocked;
-            isLocked = keyguardManager != null && keyguardManager.isKeyguardLocked();
-
-            if (isLocked != wasLocked) {
+            // 每次呼叫都重新抓取鎖定狀態
+            boolean newState = keyguardManager != null && keyguardManager.isKeyguardLocked();
+            
+            // 只要狀態改變，或者需要強制更新時
+            if (isLocked != newState) {
+                isLocked = newState;
                 switchPlaylistSource();
             }
         }
@@ -226,64 +230,69 @@ public class ParallaxWallpaperService extends WallpaperService {
             if (!isPlaylistMode) return;
 
             // 1. 保存當前進度
-            if (!wasLocked()) { 
+            if (!wasLocked()) { // 原本是 Home
                 homePlaylistIndex = currentPlaylistIndex;
-            } else { 
+            } else { // 原本是 Lock
                 lockPlaylistIndex = currentPlaylistIndex;
             }
 
-            // 2. 決定新的資料來源
+            // 2. 決定新的資料來源 (包含 Interval 切換)
             resolvePlaylistSource();
 
-            // 3. 載入圖片
+            // 3. 🔥🔥 立即載入新圖片 (解決解鎖後畫面卡住的問題)
+            // 不要等待 timer，直接執行換圖邏輯
             loadNextImageInternal(currentPlaylistIndex);
             
-            // 4. 重啟輪播
+            // 4. 重設輪播 Timer
             if (visible) {
                 playlistHandler.removeCallbacks(playlistRunner);
                 if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
-                    playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                    playlistHandler.postDelayed(playlistRunner, currentInterval * 1000L);
                 }
             }
         }
 
-        // 🔥 核心修正：智慧切換邏輯 (Smart Fallback)
-        // 如果原本該顯示的清單是空的，就去借用另一邊的，防止黑屏
         private void resolvePlaylistSource() {
             if (isLocked) {
-                // 鎖定時：優先用 Lock，沒有則用 Home
+                // 鎖定模式
                 if (!lockPlaylistPaths.isEmpty()) {
                     currentPlaylistPaths = lockPlaylistPaths;
                     currentPlaylistConfigs = lockPlaylistConfigs;
                     currentPlaylistIndex = lockPlaylistIndex;
+                    currentInterval = lockInterval; // 🔥 使用 Lock Interval
                 } else {
+                    // Fallback to Home
                     currentPlaylistPaths = homePlaylistPaths;
                     currentPlaylistConfigs = homePlaylistConfigs;
                     currentPlaylistIndex = homePlaylistIndex;
+                    currentInterval = homeInterval;
                 }
             } else {
-                // 解鎖時：優先用 Home，沒有則用 Lock (解決只設定鎖定時預覽黑屏的問題)
+                // 解鎖模式 (Home)
                 if (!homePlaylistPaths.isEmpty()) {
                     currentPlaylistPaths = homePlaylistPaths;
                     currentPlaylistConfigs = homePlaylistConfigs;
                     currentPlaylistIndex = homePlaylistIndex;
+                    currentInterval = homeInterval; // 🔥 使用 Home Interval
                 } else {
+                    // Fallback to Lock (for preview)
                     currentPlaylistPaths = lockPlaylistPaths;
                     currentPlaylistConfigs = lockPlaylistConfigs;
                     currentPlaylistIndex = lockPlaylistIndex;
+                    currentInterval = lockInterval;
                 }
             }
 
-            // 安全檢查：防止 index 超出範圍
+            // 安全檢查
             if (currentPlaylistPaths != null && !currentPlaylistPaths.isEmpty()) {
                 if (currentPlaylistIndex >= currentPlaylistPaths.size()) {
                     currentPlaylistIndex = 0;
                 }
             }
+            if (currentInterval < 5) currentInterval = 5;
         }
 
         private boolean wasLocked() {
-            // 簡單判斷：如果當前指標指向 Lock 清單，代表剛剛是鎖定狀態
             return currentPlaylistPaths == lockPlaylistPaths;
         }
 
@@ -294,7 +303,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 JSONObject json = new JSONObject(jsonStr);
                 
-                // --- 通用設定 ---
                 if (json.has("scale")) userScale = (float) json.getDouble("scale");
                 if (json.has("motionStrength")) globalMotionStrength = (float) json.getDouble("motionStrength");
                 if (json.has("motionEnabled")) globalMotionEnabled = json.optBoolean("motionEnabled", true);
@@ -312,8 +320,13 @@ public class ParallaxWallpaperService extends WallpaperService {
                 currentMotionEnabled = globalMotionEnabled;
 
                 if (isPlaylistMode) {
-                    playlistInterval = json.optInt("interval", 60);
-                    if (playlistInterval < 5) playlistInterval = 5;
+                    // 🔥 讀取分開的秒數設定
+                    homeInterval = json.optInt("home_interval", 60);
+                    lockInterval = json.optInt("lock_interval", 60);
+                    // 備援：如果新欄位不存在，讀舊的 interval
+                    int legacyInterval = json.optInt("interval", 60);
+                    if (!json.has("home_interval")) homeInterval = legacyInterval;
+                    if (!json.has("lock_interval")) lockInterval = legacyInterval;
 
                     homePlaylistPaths.clear();
                     homePlaylistConfigs.clear();
@@ -325,24 +338,10 @@ public class ParallaxWallpaperService extends WallpaperService {
                         parsePlaylist(json, "lock_playlist", "lock_playlistConfigs", lockPlaylistPaths, lockPlaylistConfigs);
                     }
 
-                    // 重新決定當前要顯示什麼 (包含 Fallback 邏輯)
-                    resolvePlaylistSource();
+                    // 重新判斷狀態並載入
+                    isLocked = keyguardManager != null && keyguardManager.isKeyguardLocked();
+                    switchPlaylistSource(); 
                     
-                    if (currentBitmap == null && currentPlaylistPaths != null && !currentPlaylistPaths.isEmpty()) {
-                        // 第一次載入
-                        loadNextImageInternal(currentPlaylistIndex);
-                    } else {
-                        // 重新整理 (例如設定改變)
-                        loadNextImageInternal(currentPlaylistIndex);
-                    }
-                    
-                    if (visible) {
-                        playlistHandler.removeCallbacks(playlistRunner);
-                        if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
-                            playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
-                        }
-                    }
-
                 } else {
                     playlistHandler.removeCallbacks(playlistRunner); 
                     if (!singleImagePath.isEmpty()) {
@@ -510,13 +509,15 @@ public class ParallaxWallpaperService extends WallpaperService {
         public void onVisibilityChanged(boolean visible) {
             this.visible = visible;
             if (visible) {
-                checkLockState();
+                // 🔥 每次可見時，強制檢查鎖定狀態並刷新
+                checkLockState(); 
+                
                 loadSettings(); 
                 updateSensorState();
                 if (isPlaylistMode) {
                     playlistHandler.removeCallbacks(playlistRunner);
                     if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
-                        playlistHandler.postDelayed(playlistRunner, playlistInterval * 1000L);
+                        playlistHandler.postDelayed(playlistRunner, currentInterval * 1000L);
                     }
                 }
             } else {
