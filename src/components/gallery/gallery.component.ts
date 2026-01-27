@@ -897,18 +897,22 @@ export class GalleryComponent {
     }
   }
 
-  onFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) {
-      const count = this.photoService.addPhotos(input.files);
-      if (count > 0) {
-        this.showToast(`已匯入 ${count} 張照片`);
-      } else {
-        this.showToast('沒有匯入新照片 (重複的檔案)');
-      }
+// 🔥 [FIX] 加上 async 和 await，因為現在存檔需要時間
+async onFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement;
+  if (input.files && input.files.length > 0) {
+    
+    // 這裡加上 await，等待檔案寫入完成後再取得數量
+    const count = await this.photoService.addPhotos(input.files);
+    
+    if (count > 0) {
+      this.showToast(`已匯入 ${count} 張照片`);
+    } else {
+      this.showToast('沒有匯入新照片 (重複的檔案)');
     }
-    input.value = '';
   }
+  input.value = '';
+}
   
   showToast(msg: string) {
       this.toastMessage.set(msg);
