@@ -12,22 +12,21 @@ export interface ViewSettings {
 
 export interface Photo {
   id: string;
-  url: string; // 這是顯示用的 Blob URL 或 Capacitor URL
+  url: string;
   name: string;
-  
-  // 🔥 [FIX] 改為可選 (Optional)，因為從存檔讀回來時，我們拿不到原始 File 物件
-  file?: File; 
-  size?: number; // 新增 size 欄位來記錄檔案大小 (取代 file.size)
-  
+  file?: File;
+  size?: number;
   caption?: string;
   motionSettings?: {
     strength: number;
     enabled: boolean;
   };
   viewSettings?: ViewSettings;
+  savedPath?: string;
   
-  // 🔥 [NEW] 用來記錄檔案存在手機裡的實際路徑 (Persistence)
-  savedPath?: string; 
+  // 🔥 [NEW] 新增：批次 ID 與時間戳記 (用於分組顯示)
+  batchId?: number; 
+  timestamp?: number;
 }
 
 export type SortOrder = 'random' | 'name_asc' | 'name_desc' | 'date_asc' | 'date_desc' | 'custom';
@@ -40,13 +39,19 @@ export interface Playlist {
   sortOrder: SortOrder; 
 }
 
-// Backup Data Structure
 export interface BackupData {
   version: number;
   timestamp: number;
   globalSettings: AppSettings;
   playlists: Playlist[];
-  photos: Photo[]; // 這裡我們直接儲存 Photo 結構 (不含 file 物件)
+  photos: Photo[];
+}
+
+// 🔥 [NEW] 進度條狀態介面
+export interface ImportProgress {
+    current: number;
+    total: number;
+    isImporting: boolean;
 }
 
 @Injectable({
@@ -57,6 +62,9 @@ export class PhotoService {
   trash = signal<Photo[]>([]);
   playlists = signal<Playlist[]>([]);
   
+  // 🔥 [NEW] 匯入進度 Signal
+  importProgress = signal<ImportProgress>({ current: 0, total: 0, isImporting: false });
+
   settingsService = inject(SettingsService);
 
   activePhotoId = signal<string | null>(null);
@@ -66,10 +74,8 @@ export class PhotoService {
   private PLAYLIST_KEY = 'my_parallax_playlists';
 
   constructor() {
-    // 🔥 1. App 啟動時，嘗試讀取上次存的資料
     this.loadFromStorage();
 
-    // 🔥 2. 設置自動存檔機制 (只要 photos 或 playlists 變動就存檔)
     effect(() => {
         const currentPhotos = this.photos();
         this.savePhotosToStorage(currentPhotos);
@@ -81,52 +87,46 @@ export class PhotoService {
     });
   }
 
-  // --- Persistence Logic (存檔與讀檔) ---
+  // --- Persistence Logic ---
 
   private savePhotosToStorage(photos: Photo[]) {
-      // 存檔前，我們要過濾掉 File 物件 (因為它不能被 JSON 序列化)
-      // 我們只存 metadata 和 savedPath
       const dataToSave = photos.map(p => ({
           ...p,
-          file: undefined, // 移除 file
-          url: '' // 暫時清空 url，因為 Blob URL 重開機後會失效，我們要靠 savedPath 重建
+          file: undefined,
+          url: '' 
       }));
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(dataToSave));
   }
 
   private async loadFromStorage() {
       try {
-          // 1. 載入播放清單
           const playlistJson = localStorage.getItem(this.PLAYLIST_KEY);
           if (playlistJson) {
               this.playlists.set(JSON.parse(playlistJson));
           }
 
-          // 2. 載入照片
           const photosJson = localStorage.getItem(this.STORAGE_KEY);
           if (photosJson) {
               const savedPhotos: Photo[] = JSON.parse(photosJson);
               const restoredPhotos: Photo[] = [];
 
               for (const p of savedPhotos) {
-                  // 重建可用的圖片網址
                   let displayUrl = '';
-                  
                   if (p.savedPath) {
-                      // 如果有存過路徑，轉換成 Capacitor 的 WebView 路徑
-                      const uri = await Filesystem.getUri({
-                          path: p.savedPath,
-                          directory: Directory.Data
-                      });
-                      displayUrl = Capacitor.convertFileSrc(uri.uri);
+                      try {
+                          const uri = await Filesystem.getUri({
+                              path: p.savedPath,
+                              directory: Directory.Data
+                          });
+                          displayUrl = Capacitor.convertFileSrc(uri.uri);
+                      } catch (e) { continue; }
                   } else {
-                      // 如果是舊資料沒有 savedPath，先跳過或給一個預設圖
                       continue; 
                   }
 
                   restoredPhotos.push({
                       ...p,
-                      url: displayUrl // 填回可顯示的 URL
+                      url: displayUrl
                   });
               }
               
@@ -139,7 +139,6 @@ export class PhotoService {
       }
   }
 
-  // --- ID Generator ---
   private generateId(): string {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         try { return crypto.randomUUID(); } catch (e) {}
@@ -150,38 +149,40 @@ export class PhotoService {
     });
   }
 
-  // --- Add Photos (Modified for Persistence) ---
+  // --- Add Photos (Modified: 批次處理 + 進度條 + 逆序插入) ---
   async addPhotos(files: FileList | null): Promise<number> {
-    if (!files) return 0;
+    if (!files || files.length === 0) return 0;
 
-    const currentPhotos = this.photos();
-    const existingSignatures = new Set(currentPhotos.map(p => p.name + '-' + (p.size || 0)));
+    // 1. 初始化進度條
+    this.importProgress.set({ current: 0, total: files.length, isImporting: true });
+
+    // 2. 產生批次 ID (使用當前時間戳)
+    const currentBatchId = Date.now();
     const newPhotos: Photo[] = [];
 
-    // 我們需要把檔案寫入手機儲存空間，這樣重開機才找得到
+    // 3. 處理檔案
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        
+        // 更新進度 (+1 因為從 1 開始數比較直覺)
+        this.importProgress.update(p => ({ ...p, current: i + 1 }));
+
         if (!file.type.startsWith('image/')) continue;
 
-        const signature = file.name + '-' + file.size;
-        if (existingSignatures.has(signature)) continue;
-
+        // 🔥 [FIX] 移除檔名重複檢查，無條件接收
         const id = this.generateId();
-        const fileName = `photo_${id}_${Date.now()}.jpg`; // 產生一個唯一檔名
+        const fileName = `photo_${id}_${currentBatchId}.jpg`; // 檔名加入批次ID避免極端狀況重複
 
         try {
-            // 1. 讀取檔案轉 Base64
             const base64 = await this.fileToBase64(file);
             
-            // 2. 寫入到手機硬碟 (Data Directory)
-            const savedFile = await Filesystem.writeFile({
+            await Filesystem.writeFile({
                 path: fileName,
                 data: base64,
                 directory: Directory.Data,
                 recursive: true
             });
 
-            // 3. 取得可顯示的 Web URL
             const uri = await Filesystem.getUri({
                 path: fileName,
                 directory: Directory.Data
@@ -192,22 +193,28 @@ export class PhotoService {
                 id: id,
                 url: webUrl,
                 name: file.name,
-                size: file.size, // 另外紀錄 size
-                savedPath: fileName, // 🔥 關鍵：記住這個檔名
-                // file: file // 不存 file 物件了，為了省記憶體和方便存檔
+                size: file.size, 
+                savedPath: fileName,
+                batchId: currentBatchId, // 🔥 記錄批次 ID
+                timestamp: Date.now()    // 🔥 記錄匯入時間
             });
-
-            existingSignatures.add(signature);
 
         } catch (e) {
             console.error('Failed to save imported photo:', file.name, e);
         }
     }
 
+    // 4. 更新照片列表 (新圖插在最前面)
     if (newPhotos.length > 0) {
-        this.photos.update(current => [...current, ...newPhotos]);
+        // 🔥 [FIX] 使用 unshift 邏輯：[...新圖, ...舊圖]
+        this.photos.update(current => [...newPhotos, ...current]);
     }
     
+    // 5. 關閉進度條 (延遲一下讓使用者看到 100%)
+    setTimeout(() => {
+        this.importProgress.set({ current: 0, total: 0, isImporting: false });
+    }, 500);
+
     return newPhotos.length;
   }
 
@@ -217,7 +224,6 @@ export class PhotoService {
           reader.readAsDataURL(file);
           reader.onload = () => {
               const result = reader.result as string;
-              // 移除 "data:image/jpeg;base64," 前綴，Filesystem API 只需要純 Base64
               const base64 = result.split(',')[1]; 
               resolve(base64);
           };
@@ -225,7 +231,7 @@ export class PhotoService {
       });
   }
 
-  // --- Delete Logic (Update to delete file) ---
+  // --- Delete Logic ---
   moveToTrash(ids: string[]) {
     const photosToTrash = this.photos().filter(p => ids.includes(p.id));
     this.trash.update(current => [...current, ...photosToTrash]);
@@ -244,7 +250,6 @@ export class PhotoService {
 
   async emptyTrash() {
     const items = this.trash();
-    // 永久刪除時，順便把硬碟裡的檔案刪掉
     for (const p of items) {
         if (p.savedPath) {
             try {
@@ -264,7 +269,7 @@ export class PhotoService {
     this.trash.set([]);
   }
 
-  // --- Other Methods (Keep as is) ---
+  // --- Other Methods ---
   selectPhoto(id: string) { this.activePhotoId.set(id); }
   clearSelection() { this.activePhotoId.set(null); }
 
@@ -323,11 +328,11 @@ export class PhotoService {
   // --- BACKUP & RESTORE ---
   generateBackup(): string {
     const backup: BackupData = {
-      version: 2, // Bump version
+      version: 3, // Bump version
       timestamp: Date.now(),
       globalSettings: this.settingsService.settings(),
       playlists: this.playlists(),
-      photos: this.photos() // Photos now contain savedPath
+      photos: this.photos()
     };
     return JSON.stringify(backup, null, 2);
   }
@@ -344,22 +349,11 @@ export class PhotoService {
         this.settingsService.updateSettings(backup.globalSettings);
       }
 
-      // 注意：還原備份有點複雜，因為舊的檔案路徑在備份檔裡可能在新手機上無效
-      // 這裡暫時假設是「原地還原」或是「設定檔還原」，若涉及換手機，需要更複雜的匯入邏輯
-      // 簡單起見，我們信任備份檔裡的設定，但會過濾掉不存在的檔案
-      
       const restoredPhotos = backup.photos.map(p => ({
           ...p,
-          url: '' // Reset URL, let loadFromStorage handle it or need re-import logic
+          url: '' 
       }));
 
-      // 這裡簡單覆蓋，實務上可能需要更聰明的合併
-      // 因為這部分邏輯較多，為了先解決「消失問題」，我們這裡從簡
-      // 建議使用者先匯入照片，再還原設定
-      
-      // 這裡我們只還原「清單設定」和「圖片設定」，但不強制覆蓋照片清單，避免清空
-      // 而是嘗試根據 ID 匹配
-      
       let matchCount = 0;
       const currentPhotos = this.photos();
       const updatedPhotos = currentPhotos.map(curr => {
@@ -370,7 +364,9 @@ export class PhotoService {
                   ...curr,
                   caption: match.caption,
                   motionSettings: match.motionSettings,
-                  viewSettings: match.viewSettings
+                  viewSettings: match.viewSettings,
+                  batchId: match.batchId, // Restore batch info
+                  timestamp: match.timestamp
               };
           }
           return curr;

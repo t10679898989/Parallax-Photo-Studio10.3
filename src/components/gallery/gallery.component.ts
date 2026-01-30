@@ -21,6 +21,13 @@ interface CreatePlaylistState {
   name: string;
 }
 
+// 🔥 [NEW] 分組結構介面
+interface PhotoGroup {
+    batchId: number;
+    title: string;
+    items: Photo[];
+}
+
 @Component({
   selector: 'app-gallery',
   imports: [CommonModule, FormsModule, LazyImgDirective],
@@ -35,22 +42,36 @@ interface CreatePlaylistState {
       (pointermove)="onGlobalPointerMove($event)"
       (click)="onBackgroundClick($event)"
     >
+      @if (importProgress().isImporting) {
+          <div class="absolute inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+              <div class="flex flex-col items-center gap-4 p-8 rounded-2xl bg-slate-800 border border-slate-700 shadow-2xl">
+                  <div class="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                  <div class="text-center">
+                      <h3 class="text-xl font-bold text-white mb-1">正在匯入照片...</h3>
+                      <p class="text-emerald-400 font-mono text-lg">
+                          {{ importProgress().current }} / {{ importProgress().total }}
+                      </p>
+                  </div>
+              </div>
+          </div>
+      }
+
       @if (showSettings()) {
           <div class="h-full flex flex-col animate-fade-in bg-slate-900">
-             <div class="flex items-center gap-4 p-4 md:p-6 border-b border-slate-800 bg-slate-900 z-10 sticky top-0">
-               <button (click)="toggleSettings()" class="p-2 -ml-2 rounded-full hover:bg-slate-800 text-slate-300 transition-colors">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-               </button>
-               <h2 class="text-xl font-bold text-white">全域設定 (Global Settings)</h2>
-             </div>
-             
-             <div class="flex-1 overflow-y-auto custom-scroll p-4 md:p-6">
+              <div class="flex items-center gap-4 p-4 md:p-6 border-b border-slate-800 bg-slate-900 z-10 sticky top-0">
+                <button (click)="toggleSettings()" class="p-2 -ml-2 rounded-full hover:bg-slate-800 text-slate-300 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <h2 class="text-xl font-bold text-white">全域設定 (Global Settings)</h2>
+              </div>
+              
+              <div class="flex-1 overflow-y-auto custom-scroll p-4 md:p-6">
                 <div class="max-w-2xl mx-auto w-full space-y-8 pb-20">
                   
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                     <h3 class="font-medium text-white flex items-center gap-2 mb-4">
-                       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                       服務與系統 (Service & System)
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        服務與系統 (Service & System)
                     </h3>
                     
                     <div class="space-y-6">
@@ -117,11 +138,11 @@ interface CreatePlaylistState {
                           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                           顯示設定 (Display Settings)
                       </h3>
-                       <div class="flex justify-between items-center mb-2">
+                        <div class="flex justify-between items-center mb-2">
                           <label class="text-sm font-medium text-slate-300">目標幀率 (Target FPS)</label>
                           <span class="text-emerald-400 font-mono text-sm">{{ settings.settings().targetFps }} FPS</span>
                         </div>
-                        <input type="range" min="30" max="120" step="30" [ngModel]="settings.settings().targetFps" (ngModelChange)="updateSetting('targetFps', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                        <input type="range" min="30" max="120" step="30" [ngModel]="settings.settings().targetFps" (ngModelChange)="updateSetting('targetFps', +$event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
                   </div>
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
@@ -149,7 +170,7 @@ interface CreatePlaylistState {
                               <input 
                                   type="range" min="0" max="5" step="0.1" 
                                   [ngModel]="settings.settings().globalMotionStrength" 
-                                  (ngModelChange)="updateSetting('globalMotionStrength', $event)" 
+                                  (ngModelChange)="updateSetting('globalMotionStrength', +$event)" 
                                   class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                               >
                           </div>
@@ -168,41 +189,41 @@ interface CreatePlaylistState {
                   </div>
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                     <h3 class="font-medium text-white mb-4 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                        縮圖外觀 (Thumbnail)
-                     </h3>
+                      <h3 class="font-medium text-white mb-4 flex items-center gap-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                         縮圖外觀 (Thumbnail)
+                      </h3>
 
-                     <div class="space-y-6">
-                       <div>
-                           <div class="flex justify-between text-sm text-slate-300 mb-3">
-                               <span>形狀 (Shape)</span>
-                               <span class="text-emerald-400 capitalize">{{ settings.settings().thumbnailShape }}</span>
-                           </div>
-                           <div class="grid grid-cols-4 gap-2">
-                               @for (shape of shapes; track shape.id) {
-                                   <button 
-                                       class="aspect-square bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all p-2"
-                                       [class.ring-2]="settings.settings().thumbnailShape === shape.id"
-                                       [class.ring-emerald-500]="settings.settings().thumbnailShape === shape.id"
-                                       [class.bg-slate-600]="settings.settings().thumbnailShape === shape.id"
-                                       [title]="shape.name"
-                                       (click)="updateSetting('thumbnailShape', shape.id)"
-                                   >
-                                       <div class="w-full h-full bg-slate-400" [ngStyle]="getShapeStyle(shape.id)"></div>
-                                   </button>
-                               }
-                           </div>
-                       </div>
+                      <div class="space-y-6">
+                        <div>
+                            <div class="flex justify-between text-sm text-slate-300 mb-3">
+                                <span>形狀 (Shape)</span>
+                                <span class="text-emerald-400 capitalize">{{ settings.settings().thumbnailShape }}</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2">
+                                @for (shape of shapes; track shape.id) {
+                                    <button 
+                                         class="aspect-square bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-all p-2"
+                                         [class.ring-2]="settings.settings().thumbnailShape === shape.id"
+                                         [class.ring-emerald-500]="settings.settings().thumbnailShape === shape.id"
+                                         [class.bg-slate-600]="settings.settings().thumbnailShape === shape.id"
+                                         [title]="shape.name"
+                                         (click)="updateSetting('thumbnailShape', shape.id)"
+                                    >
+                                         <div class="w-full h-full bg-slate-400" [ngStyle]="getShapeStyle(shape.id)"></div>
+                                    </button>
+                                }
+                            </div>
+                        </div>
 
-                       <div>
-                           <div class="flex justify-between text-sm text-slate-300 mb-2">
-                               <span>間距 (Gap)</span>
-                               <span class="font-mono text-emerald-400">{{ settings.settings().thumbnailGap }}px</span>
-                           </div>
-                           <input type="range" min="0" max="48" step="4" [ngModel]="settings.settings().thumbnailGap" (ngModelChange)="updateSetting('thumbnailGap', $event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" >
-                       </div>
-                     </div>
+                        <div>
+                            <div class="flex justify-between text-sm text-slate-300 mb-2">
+                                <span>間距 (Gap)</span>
+                                <span class="font-mono text-emerald-400">{{ settings.settings().thumbnailGap }}px</span>
+                            </div>
+                            <input type="range" min="0" max="48" step="4" [ngModel]="settings.settings().thumbnailGap" (ngModelChange)="updateSetting('thumbnailGap', +$event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" >
+                        </div>
+                      </div>
                   </div>
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
@@ -233,14 +254,14 @@ interface CreatePlaylistState {
                   </div>
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                     <h3 class="font-medium text-white flex items-center gap-2 mb-4">
+                      <h3 class="font-medium text-white flex items-center gap-2 mb-4">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                         備份與還原 (Backup & Restore)
-                     </h3>
-                     <p class="text-sm text-slate-400 mb-4">
-                       將您的設定、縮放比例和播放清單儲存為檔案。還原時，系統會自動比對照片 ID 或檔名來套用設定。
-                     </p>
-                     <div class="flex gap-3">
+                      </h3>
+                      <p class="text-sm text-slate-400 mb-4">
+                        將您的設定、縮放比例和播放清單儲存為檔案。還原時，系統會自動比對照片 ID 或檔名來套用設定。
+                      </p>
+                      <div class="flex gap-3">
                         <button (click)="downloadBackup()" class="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-colors text-sm font-medium flex items-center justify-center gap-2 border border-slate-600">
                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                            備份設定 (Backup)
@@ -249,7 +270,7 @@ interface CreatePlaylistState {
                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                            還原設定 (Restore)
                         </button>
-                     </div>
+                      </div>
                   </div>
                  </div>
               </div>
@@ -637,62 +658,122 @@ interface CreatePlaylistState {
             </div>
           } @else {
             <div 
-                class="overflow-y-auto h-full w-full custom-scroll"
-                [style.padding.px]="settings.settings().thumbnailGap"
-                (scroll)="onScroll()"
+               class="overflow-y-auto h-full w-full custom-scroll"
+               (scroll)="onScroll()"
             >
-              <div 
-                class="grid" 
-                [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'" 
-                [style.gap.px]="settings.settings().thumbnailGap"
-              >
-                @for (photo of currentPhotos; track photo.id) {
-                  <div 
-                    class="relative aspect-square transition-transform select-none bg-slate-800"
-                    [attr.data-id]="photo.id"
-                    [ngStyle]="currentShapeStyle()"
-                    [class.scale-95]="selectedIds().includes(photo.id)"
-                    (pointerdown)="onPointerDown($event, photo.id)"
-                    (click)="onPhotoClick($event, photo)"
-                  >
-                    @if (selectedIds().includes(photo.id)) {
-                        <div class="absolute inset-0 bg-emerald-500/50 z-10 pointer-events-none mix-blend-overlay"></div>
-                        <div class="absolute inset-0 border-4 border-emerald-500 z-20 pointer-events-none"></div>
-                    }
+              @if (!photoService.activePlaylistId()) {
+                  @for (group of groupedPhotos(); track group.batchId) {
+                      <div class="mb-6">
+                          <div class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-sm px-4 py-3 flex items-center justify-between border-b border-slate-800 mb-2">
+                              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                  {{ group.title }}
+                              </h3>
+                              
+                              <div class="flex items-center gap-3">
+                                  <span class="text-xs text-slate-500">{{ group.items.length }} 張</span>
+                                  <button (click)="selectBatch(group)" class="text-xs font-medium text-emerald-400 hover:text-emerald-300 px-2 py-1 rounded hover:bg-slate-800 transition-colors">
+                                      全選此批
+                                  </button>
+                              </div>
+                          </div>
 
-                    <img 
-                      [appLazyLoad]="photo.url" 
-                      class="w-full h-full object-cover pointer-events-none block"
-                      loading="lazy"
-                    >
-                    
-                    @if (selectedIds().length > 0 || isSelecting()) {
-                      <div class="absolute top-2 right-2 w-6 h-6 rounded-full z-30 flex items-center justify-center transition-colors shadow-sm"
-                           [class.bg-emerald-500]="selectedIds().includes(photo.id)"
-                           [class.bg-black-50]="!selectedIds().includes(photo.id)"
-                           [class.border-2]="!selectedIds().includes(photo.id)"
-                           [class.border-white]="!selectedIds().includes(photo.id)"
-                      >
-                          @if (selectedIds().includes(photo.id)) {
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polyline points="20 6 9 17 4 12"/></svg>
-                          }
+                          <div 
+                              class="grid px-4" 
+                              [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'" 
+                              [style.gap.px]="settings.settings().thumbnailGap"
+                          >
+                              @for (photo of group.items; track photo.id) {
+                                  <div 
+                                    class="relative aspect-square transition-transform select-none bg-slate-800"
+                                    [attr.data-id]="photo.id"
+                                    [ngStyle]="currentShapeStyle()"
+                                    [class.scale-95]="selectedIds().includes(photo.id)"
+                                    (pointerdown)="onPointerDown($event, photo.id)"
+                                    (click)="onPhotoClick($event, photo)"
+                                  >
+                                    @if (selectedIds().includes(photo.id)) {
+                                        <div class="absolute inset-0 bg-emerald-500/50 z-10 pointer-events-none mix-blend-overlay"></div>
+                                        <div class="absolute inset-0 border-4 border-emerald-500 z-20 pointer-events-none"></div>
+                                    }
+
+                                    <img 
+                                      [appLazyLoad]="photo.url" 
+                                      class="w-full h-full object-cover pointer-events-none block"
+                                      loading="lazy"
+                                    >
+                                    
+                                    @if (selectedIds().length > 0 || isSelecting()) {
+                                      <div class="absolute top-2 right-2 w-6 h-6 rounded-full z-30 flex items-center justify-center transition-colors shadow-sm"
+                                           [class.bg-emerald-500]="selectedIds().includes(photo.id)"
+                                           [class.bg-black-50]="!selectedIds().includes(photo.id)"
+                                           [class.border-2]="!selectedIds().includes(photo.id)"
+                                           [class.border-white]="!selectedIds().includes(photo.id)"
+                                      >
+                                          @if (selectedIds().includes(photo.id)) {
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polyline points="20 6 9 17 4 12"/></svg>
+                                          }
+                                      </div>
+                                    }
+                                  </div>
+                              }
+                          </div>
                       </div>
-                    }
+                  }
+              } @else {
+                  <div 
+                      class="grid px-4 pt-4" 
+                      [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'" 
+                      [style.gap.px]="settings.settings().thumbnailGap"
+                  >
+                      @for (photo of currentPhotos; track photo.id) {
+                          <div 
+                            class="relative aspect-square transition-transform select-none bg-slate-800"
+                            [attr.data-id]="photo.id"
+                            [ngStyle]="currentShapeStyle()"
+                            [class.scale-95]="selectedIds().includes(photo.id)"
+                            (pointerdown)="onPointerDown($event, photo.id)"
+                            (click)="onPhotoClick($event, photo)"
+                          >
+                            @if (selectedIds().includes(photo.id)) {
+                                <div class="absolute inset-0 bg-emerald-500/50 z-10 pointer-events-none mix-blend-overlay"></div>
+                                <div class="absolute inset-0 border-4 border-emerald-500 z-20 pointer-events-none"></div>
+                            }
+
+                            <img 
+                              [appLazyLoad]="photo.url" 
+                              class="w-full h-full object-cover pointer-events-none block"
+                              loading="lazy"
+                            >
+                            
+                            @if (selectedIds().length > 0 || isSelecting()) {
+                              <div class="absolute top-2 right-2 w-6 h-6 rounded-full z-30 flex items-center justify-center transition-colors shadow-sm"
+                                   [class.bg-emerald-500]="selectedIds().includes(photo.id)"
+                                   [class.bg-black-50]="!selectedIds().includes(photo.id)"
+                                   [class.border-2]="!selectedIds().includes(photo.id)"
+                                   [class.border-white]="!selectedIds().includes(photo.id)"
+                              >
+                                  @if (selectedIds().includes(photo.id)) {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="text-white"><polyline points="20 6 9 17 4 12"/></svg>
+                                  }
+                              </div>
+                            }
+                          </div>
+                      }
                   </div>
-                }
-                <div class="h-32 w-full col-span-full"></div>
-              </div>
+              }
+              <div class="h-32 w-full"></div>
             </div>
           }
         } @else {
           <div class="h-full overflow-y-auto pb-20 no-scrollbar p-4 md:p-6">
-             <button class="w-full py-3 mb-4 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2"
+              <button class="w-full py-3 mb-4 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2"
                 (click)="promptCreatePlaylist()">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 建立新播放清單
-             </button>
+              </button>
 
-             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 @for (playlist of playlists(); track playlist.id) {
                   <button 
                     (click)="enterPlaylist(playlist.id)"
@@ -736,30 +817,16 @@ interface CreatePlaylistState {
     </div>
   `,
   styles: [`
-    .animate-fade-in {
-      animation: fadeIn 0.2s ease-out;
-    }
+    .animate-fade-in { animation: fadeIn 0.2s ease-out; }
     .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: scale(0.95); }
-      to { opacity: 1; transform: scale(1); }
-    }
+    .animate-spin { animation: spin 1s linear infinite; }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-    .custom-scroll::-webkit-scrollbar {
-        width: 10px;
-    }
-    .custom-scroll::-webkit-scrollbar-track {
-        background: #1e293b;
-    }
-    .custom-scroll::-webkit-scrollbar-thumb {
-        background-color: #475569;
-        border-radius: 4px;
-        border: 2px solid #1e293b;
-        background-clip: content-box;
-    }
-    .custom-scroll::-webkit-scrollbar-thumb:hover {
-        background-color: #64748b;
-    }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .custom-scroll::-webkit-scrollbar { width: 10px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
+    .custom-scroll::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 4px; border: 2px solid #1e293b; background-clip: content-box; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
   `]
 })
 export class GalleryComponent {
@@ -801,14 +868,47 @@ export class GalleryComponent {
   
   detailsState = signal<DetailsState>({ visible: false, photo: null });
 
-  // 🔥 NEW: Double Tap Confirmation State
   showDoubleTapConfirm = signal(false);
   pendingWallpaperType = signal<'home' | 'lock' | 'both' | null>(null);
+
+  importProgress = this.photoService.importProgress;
 
   trashCount = computed(() => this.photoService.trash().length);
 
   activePlaylist = computed(() => {
     return this.playlists().find(p => p.id === this.photoService.activePlaylistId()) || null;
+  });
+
+  // 🔥 [NEW] 分組邏輯：將照片依據 batchId 分組
+  groupedPhotos = computed(() => {
+      const allPhotos = this.photos();
+      const groups = new Map<number, PhotoGroup>();
+      
+      // 未分類的批次 ID (給舊照片用)
+      const UNKNOWN_BATCH = 0;
+
+      allPhotos.forEach(photo => {
+          const batchId = photo.batchId || UNKNOWN_BATCH;
+          
+          if (!groups.has(batchId)) {
+              let title = '早期匯入';
+              if (batchId !== UNKNOWN_BATCH) {
+                  const date = new Date(batchId);
+                  title = date.toLocaleString('zh-TW', { 
+                      year: 'numeric', 
+                      month: '2-digit', 
+                      day: '2-digit', 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                  }) + ' 匯入';
+              }
+              groups.set(batchId, { batchId, title, items: [] });
+          }
+          groups.get(batchId)?.items.push(photo);
+      });
+
+      // 將 Map 轉為陣列，並依照批次時間倒序排列 (新的在上面)
+      return Array.from(groups.values()).sort((a, b) => b.batchId - a.batchId);
   });
 
   activePlaylistPhotos = computed(() => {
@@ -818,19 +918,12 @@ export class GalleryComponent {
       let items = this.photos().filter(p => playlist.photoIds.includes(p.id));
       
       switch (playlist.sortOrder) {
-          case 'name_asc':
-              return [...items].sort((a, b) => a.name.localeCompare(b.name));
-          case 'name_desc':
-              return [...items].sort((a, b) => b.name.localeCompare(a.name));
-          case 'date_asc':
-              return [...items].sort((a, b) => a.file.lastModified - b.file.lastModified);
-          case 'date_desc':
-              return [...items].sort((a, b) => b.file.lastModified - a.file.lastModified);
-          case 'random':
-              return items; 
-          case 'custom':
-          default:
-              return items;
+          case 'name_asc': return [...items].sort((a, b) => a.name.localeCompare(b.name));
+          case 'name_desc': return [...items].sort((a, b) => b.name.localeCompare(a.name));
+          case 'date_asc': return [...items].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          case 'date_desc': return [...items].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          case 'random': return items; 
+          case 'custom': default: return items;
       }
   });
 
@@ -897,22 +990,28 @@ export class GalleryComponent {
     }
   }
 
-// 🔥 [FIX] 加上 async 和 await，因為現在存檔需要時間
-async onFileSelected(event: Event) {
-  const input = event.target as HTMLInputElement;
-  if (input.files && input.files.length > 0) {
-    
-    // 這裡加上 await，等待檔案寫入完成後再取得數量
-    const count = await this.photoService.addPhotos(input.files);
-    
-    if (count > 0) {
-      this.showToast(`已匯入 ${count} 張照片`);
-    } else {
-      this.showToast('沒有匯入新照片 (重複的檔案)');
-    }
+  // 🔥 [NEW] 批次全選功能
+  selectBatch(group: PhotoGroup) {
+      const batchIds = group.items.map(p => p.id);
+      // 將這一批的 ID 加入目前的選取清單 (Set 邏輯，避免重複)
+      const current = new Set(this.selectedIds());
+      batchIds.forEach(id => current.add(id));
+      this.selectedIds.set(Array.from(current));
+      this.showToast(`已選取 ${batchIds.length} 張照片`);
   }
-  input.value = '';
-}
+
+  async onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const count = await this.photoService.addPhotos(input.files);
+      if (count > 0) {
+        this.showToast(`已匯入 ${count} 張照片`);
+      } else {
+        this.showToast('沒有匯入新照片');
+      }
+    }
+    input.value = '';
+  }
   
   showToast(msg: string) {
       this.toastMessage.set(msg);
@@ -1007,7 +1106,14 @@ async onFileSelected(event: Event) {
   }
 
   toggleSettings() { this.showSettings.update(v => !v); }
-  updateSetting(k: string, v: any) { this.settings.updateSettings({[k]: v}); }
+  
+  updateSetting(k: string, v: any) { 
+      // 🔥 [FIX] 防呆：如果是 FPS 或 間隔，強制轉成數字再存
+      if (['targetFps', 'thumbnailGap', 'globalMotionStrength'].includes(k)) {
+          v = Number(v);
+      }
+      this.settings.updateSettings({[k]: v}); 
+  }
   
   applyGlobalMotion() { 
       this.photoService.clearAllMotionOverrides();
@@ -1168,7 +1274,6 @@ async onFileSelected(event: Event) {
       this.showWallpaperMenu.set(false);
   }
 
-  // 🔥 NEW: Double Tap Confirmation Logic
   openDoubleTapConfirm(type: 'home' | 'lock' | 'both') {
       this.closeWallpaperMenu();
       this.pendingWallpaperType.set(type);
@@ -1181,15 +1286,11 @@ async onFileSelected(event: Event) {
   }
 
   confirmDoubleTap(enable: boolean) {
-      // 1. Update Global Setting based on user choice
       this.settings.updateSettings({ doubleTapToChange: enable });
-      
-      // 2. Proceed to apply wallpaper
       const type = this.pendingWallpaperType();
       if (type) {
           this.applyPlaylistWallpaper(type);
       }
-      
       this.showDoubleTapConfirm.set(false);
       this.pendingWallpaperType.set(null);
   }
@@ -1207,153 +1308,153 @@ async onFileSelected(event: Event) {
     });
   }
 
-// 🔥🔥🔥 修正版：支援獨立秒數設定 (Home/Lock 分開存)
-async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
-  const playlist = this.activePlaylist();
-  if (!playlist || playlist.photoIds.length === 0) {
-    this.showToast('錯誤：播放清單是空的');
-    return;
-  }
+  // 🔥🔥🔥 修正版：支援獨立秒數設定 (Home/Lock 分開存)
+  async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
+      const playlist = this.activePlaylist();
+      if (!playlist || playlist.photoIds.length === 0) {
+        this.showToast('錯誤：播放清單是空的');
+        return;
+      }
 
-  this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片 (${type.toUpperCase()})`);
+      this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片 (${type.toUpperCase()})`);
 
-  try {
-      const playlistPaths: string[] = [];
-      const playlistConfigs: any[] = []; 
-      let newFilesCount = 0;
+      try {
+          const playlistPaths: string[] = [];
+          const playlistConfigs: any[] = []; 
+          let newFilesCount = 0;
 
-      // --- 1. 圖片處理迴圈 (檢查快取、複製檔案) ---
-      for (let i = 0; i < playlist.photoIds.length; i++) {
-          const photoId = playlist.photoIds[i];
-          const photo = this.getPhotoById(photoId);
-          if (!photo) continue;
+          // --- 1. 圖片處理迴圈 (檢查快取、複製檔案) ---
+          for (let i = 0; i < playlist.photoIds.length; i++) {
+              const photoId = playlist.photoIds[i];
+              const photo = this.getPhotoById(photoId);
+              if (!photo) continue;
 
-          // 建立個別設定 (Motion/Scale)
-          const specificConfig = {
-              motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
-              motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
-              scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
-              panX: photo.viewSettings ? photo.viewSettings.panX : 0,
-              panY: photo.viewSettings ? photo.viewSettings.panY : 0
-          };
-          playlistConfigs.push(specificConfig);
+              // 建立個別設定 (Motion/Scale)
+              const specificConfig = {
+                  motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
+                  motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
+                  scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
+                  panX: photo.viewSettings ? photo.viewSettings.panX : 0,
+                  panY: photo.viewSettings ? photo.viewSettings.panY : 0
+              };
+              playlistConfigs.push(specificConfig);
 
-          const fileName = `cached_${photoId}.jpg`;
-          
-          // 檢查快取是否存在
-          try {
-              const stat = await Filesystem.stat({
-                  path: fileName,
-                  directory: Directory.Data
-              });
-              playlistPaths.push(stat.uri.replace('file://', ''));
-              continue; 
-          } catch (e) { }
-
-          // 準備來源路徑
-          const sourcePath = (photo as any).path || (photo as any).webPath;
-          let copySuccess = false;
-
-          // 嘗試直接複製 (效能較好)
-          if (sourcePath && sourcePath.startsWith('file://')) {
+              const fileName = `cached_${photoId}.jpg`;
+              
+              // 檢查快取是否存在
               try {
-                  await Filesystem.copy({
-                      from: sourcePath,
-                      to: fileName,
-                      toDirectory: Directory.Data
-                  });
                   const stat = await Filesystem.stat({
                       path: fileName,
                       directory: Directory.Data
                   });
                   playlistPaths.push(stat.uri.replace('file://', ''));
-                  copySuccess = true;
-              } catch (copyError) {}
-          }
+                  continue; 
+              } catch (e) { }
 
-          // 如果複製失敗 (例如來自 Web 或相簿 URI)，則讀取並寫入
-          if (!copySuccess) {
-              let base64Data: string;
-              if (sourcePath) {
-                  const file = await Filesystem.readFile({ path: sourcePath });
-                  base64Data = file.data as string;
-              } else if (photo.url) {
-                  const response = await fetch(photo.url);
-                  const blob = await response.blob();
-                  base64Data = await this.blobToBase64(blob);
-              } else {
-                  continue;
+              // 準備來源路徑
+              const sourcePath = (photo as any).path || (photo as any).webPath;
+              let copySuccess = false;
+
+              // 嘗試直接複製 (效能較好)
+              if (sourcePath && sourcePath.startsWith('file://')) {
+                  try {
+                      await Filesystem.copy({
+                          from: sourcePath,
+                          to: fileName,
+                          toDirectory: Directory.Data
+                      });
+                      const stat = await Filesystem.stat({
+                          path: fileName,
+                          directory: Directory.Data
+                      });
+                      playlistPaths.push(stat.uri.replace('file://', ''));
+                      copySuccess = true;
+                  } catch (copyError) {}
               }
 
-              const savedFile = await Filesystem.writeFile({
-                path: fileName,
-                data: base64Data,
-                directory: Directory.Data,
-                recursive: true
-              });
-              playlistPaths.push(savedFile.uri.replace('file://', ''));
+              // 如果複製失敗 (例如來自 Web 或相簿 URI)，則讀取並寫入
+              if (!copySuccess) {
+                  let base64Data: string;
+                  if (sourcePath) {
+                      const file = await Filesystem.readFile({ path: sourcePath });
+                      base64Data = file.data as string;
+                  } else if (photo.url) {
+                      const response = await fetch(photo.url);
+                      const blob = await response.blob();
+                      base64Data = await this.blobToBase64(blob);
+                  } else {
+                      continue;
+                  }
+
+                  const savedFile = await Filesystem.writeFile({
+                    path: fileName,
+                    data: base64Data,
+                    directory: Directory.Data,
+                    recursive: true
+                  });
+                  playlistPaths.push(savedFile.uri.replace('file://', ''));
+              }
+              
+              newFilesCount++;
+              if (newFilesCount % 10 === 0) {
+                  this.showToast(`正在最佳化新照片... (${newFilesCount})`);
+              }
+          }
+
+          if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
+
+          // --- 2. 準備設定 Payload ---
+          
+          // 取得當前清單設定的秒數
+          const newInterval = playlist.interval || 60;
+
+          const updatePayload: any = {
+              mode: 'playlist',
+              // 注意：不再寫入全域 interval，改寫入下方的 home_interval / lock_interval
+              sortOrder: playlist.sortOrder,
+              // 強制更新全域參數以符合當前清單
+              motionEnabled: this.settings.settings().globalMotionEnabled,
+              motionStrength: this.settings.settings().globalMotionStrength,
+              targetFps: this.settings.settings().targetFps,
+              doubleTapToChange: this.settings.settings().doubleTapToChange
+          };
+
+          // --- 3. 根據類型寫入對應欄位 (包含路徑與秒數) ---
+          
+          if (type === 'home' || type === 'both') {
+              updatePayload.playlist = playlistPaths;
+              updatePayload.playlistConfigs = playlistConfigs;
+              updatePayload.home_interval = newInterval; // 🔥 寫入主畫面秒數
           }
           
-          newFilesCount++;
-          if (newFilesCount % 10 === 0) {
-              this.showToast(`正在最佳化新照片... (${newFilesCount})`);
+          if (type === 'lock' || type === 'both') {
+              updatePayload.lock_playlist = playlistPaths;
+              updatePayload.lock_playlistConfigs = playlistConfigs;
+              updatePayload.lock_interval = newInterval; // 🔥 寫入鎖定畫面秒數
           }
-      }
 
-      if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
+          // --- 4. 透過 Service 統一更新 (存檔 + 通知) ---
+          this.settings.updateSettings(updatePayload);
 
-      // --- 2. 準備設定 Payload ---
-      
-      // 取得當前清單設定的秒數
-      const newInterval = playlist.interval || 60;
-
-      const updatePayload: any = {
-          mode: 'playlist',
-          // 注意：不再寫入全域 interval，改寫入下方的 home_interval / lock_interval
-          sortOrder: playlist.sortOrder,
-          // 強制更新全域參數以符合當前清單
-          motionEnabled: this.settings.settings().globalMotionEnabled,
-          motionStrength: this.settings.settings().globalMotionStrength,
-          targetFps: this.settings.settings().targetFps,
-          doubleTapToChange: this.settings.settings().doubleTapToChange
-      };
-
-      // --- 3. 根據類型寫入對應欄位 (包含路徑與秒數) ---
-      
-      if (type === 'home' || type === 'both') {
-          updatePayload.playlist = playlistPaths;
-          updatePayload.playlistConfigs = playlistConfigs;
-          updatePayload.home_interval = newInterval; // 🔥 寫入主畫面秒數
-      }
-      
-      if (type === 'lock' || type === 'both') {
-          updatePayload.lock_playlist = playlistPaths;
-          updatePayload.lock_playlistConfigs = playlistConfigs;
-          updatePayload.lock_interval = newInterval; // 🔥 寫入鎖定畫面秒數
-      }
-
-      // --- 4. 透過 Service 統一更新 (存檔 + 通知) ---
-      this.settings.updateSettings(updatePayload);
-
-      // --- 5. 觸發 Android 桌布重整 ---
-      if ((window as any).Android && (window as any).Android.setWallpaper) {
-          // 傳送第一張圖路徑是為了觸發 Service 的重繪機制
-          (window as any).Android.setWallpaper(playlistPaths[0]);
-          
-          if (newFilesCount === 0) {
-              this.showToast('設定成功！(秒速套用)');
+          // --- 5. 觸發 Android 桌布重整 ---
+          if ((window as any).Android && (window as any).Android.setWallpaper) {
+              // 傳送第一張圖路徑是為了觸發 Service 的重繪機制
+              (window as any).Android.setWallpaper(playlistPaths[0]);
+              
+              if (newFilesCount === 0) {
+                  this.showToast('設定成功！(秒速套用)');
+              } else {
+                  this.showToast(`成功！已設定 ${playlistPaths.length} 張輪播桌布`);
+              }
           } else {
-              this.showToast(`成功！已設定 ${playlistPaths.length} 張輪播桌布`);
+              this.showToast('已儲存 (Bridge Inactive)');
           }
-      } else {
-          this.showToast('已儲存 (Bridge Inactive)');
-      }
 
-  } catch (e) {
-      console.error(e);
-      this.showToast('設定失敗: ' + (e as any).message);
+      } catch (e) {
+          console.error(e);
+          this.showToast('設定失敗: ' + (e as any).message);
+      }
   }
-}
 
   formatSortOrder(order: SortOrder | undefined): string {
       switch(order) {

@@ -77,6 +77,18 @@ export class SettingsService {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+
+        // 🔥🔥🔥 [FIX] 強制轉型：避免讀取到字串導致 FPS 拉桿跳回最小值
+        // 這是解決 FPS 120 -> 30 亂跳的關鍵！
+        if (parsed.targetFps) parsed.targetFps = Number(parsed.targetFps);
+        if (parsed.thumbnailGap) parsed.thumbnailGap = Number(parsed.thumbnailGap);
+        if (parsed.globalMotionStrength) parsed.globalMotionStrength = Number(parsed.globalMotionStrength);
+        
+        // 保護秒數設定
+        if (parsed.home_interval) parsed.home_interval = Number(parsed.home_interval);
+        if (parsed.lock_interval) parsed.lock_interval = Number(parsed.lock_interval);
+        if (parsed.interval) parsed.interval = Number(parsed.interval);
+
         this.settings.set({ ...this.settings(), ...parsed });
       } catch (e) {
         console.warn('Failed to parse settings', e);
