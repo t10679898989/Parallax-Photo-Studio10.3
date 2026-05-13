@@ -1,8 +1,8 @@
+
 import { Component, computed, ElementRef, inject, input, OnDestroy, output, signal, viewChild, effect, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Photo, PhotoService } from '../../services/photo.service';
 import { SettingsService } from '../../services/settings.service';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 
 type FitMode = 'height' | 'width';
 
@@ -15,11 +15,13 @@ type FitMode = 'height' | 'width';
       (click)="onBackgroundClick($event)"
     >
       
+      <!-- Top Bar -->
       <div 
         class="absolute top-0 left-0 right-0 z-50 p-4 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent pointer-events-none transition-opacity duration-300"
         [class.opacity-0]="!uiVisible()"
         [class.opacity-100]="uiVisible()"
       >
+        <!-- Back Button -->
         <button 
           (click)="goBack.emit()" 
           class="pointer-events-auto flex items-center gap-2 px-4 py-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white hover:bg-white/10 transition-colors"
@@ -28,6 +30,7 @@ type FitMode = 'height' | 'width';
           Gallery
         </button>
 
+        <!-- New Checkmark Button (Top Right) -->
         <button 
           (click)="openWallpaperMenu()" 
           class="pointer-events-auto w-10 h-10 flex items-center justify-center bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white hover:bg-white/10 transition-colors"
@@ -36,6 +39,7 @@ type FitMode = 'height' | 'width';
         </button>
       </div>
 
+      <!-- Main Stage -->
       <div 
         class="flex-1 relative flex items-center justify-center overflow-hidden perspective-container cursor-move"
         (pointerdown)="onPointerDown($event)"
@@ -63,6 +67,7 @@ type FitMode = 'height' | 'width';
         </div>
       </div>
 
+      <!-- Settings Trigger Button -->
       <div 
         class="absolute bottom-6 right-6 z-40 transition-all duration-300 transform"
         [class.translate-y-20]="isSettingsOpen() || !uiVisible()"
@@ -76,6 +81,7 @@ type FitMode = 'height' | 'width';
         </button>
       </div>
 
+      <!-- Settings Panel -->
       <div 
         class="absolute bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-6 py-8 flex flex-col gap-6 z-50 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out"
         [class.translate-y-full]="!isSettingsOpen()"
@@ -87,8 +93,12 @@ type FitMode = 'height' | 'width';
         <div class="grid grid-cols-1 gap-6 max-w-md mx-auto w-full pb-6">
            <div class="flex items-center justify-between">
               <h3 class="text-lg font-bold text-white">Editor Settings</h3>
-              </div>
+              <button (click)="togglePreview()" class="text-sm text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1">
+                Preview
+              </button>
+           </div>
 
+           <!-- Motion Controls -->
            <div class="space-y-3">
              <div class="flex justify-between items-center">
                <label class="text-sm font-medium text-slate-300">
@@ -127,12 +137,14 @@ type FitMode = 'height' | 'width';
              </div>
            </div>
 
+           <!-- Fit Mode & Zoom -->
            <div class="space-y-3">
              <div class="flex justify-between items-center">
                 <label class="text-sm font-medium text-slate-300">Image Fit</label>
                 <span class="text-xs text-emerald-400 font-mono">Zoom: {{ ((imageScale() - 1) * 100).toFixed(0) }}%</span>
              </div>
              
+             <!-- Fit Mode Buttons -->
              <div class="grid grid-cols-2 gap-2 bg-slate-800 p-1 rounded-lg">
                <button 
                  class="px-3 py-2 rounded-md text-sm font-medium transition-all"
@@ -154,6 +166,7 @@ type FitMode = 'height' | 'width';
                </button>
              </div>
 
+             <!-- Scale Slider -->
              <div class="flex items-center gap-3 pt-1">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                 <input 
@@ -166,6 +179,7 @@ type FitMode = 'height' | 'width';
              </div>
            </div>
 
+           <!-- Actions -->
            <div class="flex gap-4 pt-2 border-t border-white/10 mt-2">
              <button (click)="resetSettings()" class="flex-1 py-3 text-slate-400 font-medium hover:text-white transition-colors">Reset</button>
              <button (click)="saveSettings()" class="flex-[2] bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors py-3 shadow-lg active:scale-95">Save</button>
@@ -173,6 +187,7 @@ type FitMode = 'height' | 'width';
         </div>
       </div>
 
+      <!-- Wallpaper Menu (Set As Dialog) -->
       @if (showWallpaperMenu()) {
         <div class="absolute inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in" (click)="closeWallpaperMenu()">
             <div class="bg-slate-800 rounded-t-2xl sm:rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-700" (click)="$event.stopPropagation()">
@@ -197,6 +212,7 @@ type FitMode = 'height' | 'width';
         </div>
       }
 
+      <!-- Simulation Toast -->
       @if (toastMessage()) {
           <div class="absolute bottom-12 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 bg-slate-800/90 backdrop-blur-md rounded-full border border-slate-600 shadow-2xl animate-slide-up flex items-center gap-2 max-w-[90%] whitespace-nowrap">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -221,6 +237,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   goBack = output<void>();
   updateCaption = output<string>(); 
   
+  // Reference to the image element for size calculations
   imageElement = viewChild<ElementRef<HTMLImageElement>>('imageElement');
 
   settingsService = inject(SettingsService);
@@ -230,7 +247,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   uiVisible = signal(true);
   
   fitMode = signal<FitMode>('height');
-  imageScale = signal(1.0);
+  imageScale = signal(1.0); // Zoom scale
   
   motionStrength = signal(1.0);
   motionEnabled = signal(false);
@@ -241,12 +258,14 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   gyroX = signal(0);
   gyroY = signal(0);
   
+  // Reactive boundaries for both Drag and Render clamping
   limitX = signal(0);
   limitY = signal(0);
   
   showWallpaperMenu = signal(false);
   toastMessage = signal<string | null>(null);
 
+  // Pointer Interaction State
   activePointers: PointerEvent[] = [];
   isDragging = false;
   isPinching = false;
@@ -261,23 +280,27 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
 
   private lastFrameTime = 0;
   
-  smoothness = computed(() => {
-    return this.settingsService.settings().batteryOptimization ? '100ms' : '50ms';
-  });
+  smoothness = computed(() => '50ms');
 
   transformStyle = computed(() => {
+    // 1. Calculate raw target position including manual pan + gyro tilt
     const rawX = this.panX() + this.gyroX();
     const rawY = this.panY() + this.gyroY();
     
+    // 2. Get current allowed boundaries
     const limX = this.limitX();
     const limY = this.limitY();
 
+    // 3. HARD CLAMP: Ensure the total translation never exceeds the image overflow limits
     const finalX = Math.max(-limX, Math.min(rawX, limX));
     const finalY = Math.max(-limY, Math.min(rawY, limY));
 
+    // 4. Rotation
     const rx = (this.gyroY() / 20) * -1; 
     const ry = (this.gyroX() / 20);
     
+    // 5. Apply Translation -> Rotation -> Scale
+    // Order matters: Translate then Rotate then Scale looks consistent for parallax.
     return `translate3d(${finalX}px, ${finalY}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${this.imageScale()})`;
   });
 
@@ -288,6 +311,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       const p = this.photo();
       const global = this.settingsService.settings();
 
+      // Load Motion Settings
       if (p.motionSettings) {
         this.motionStrength.set(p.motionSettings.strength);
         this.motionEnabled.set(p.motionSettings.enabled);
@@ -296,6 +320,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         this.motionEnabled.set(global.globalMotionEnabled);
       }
 
+      // Load View Settings (Fit, Pan, Scale)
       if (p.viewSettings) {
           this.fitMode.set(p.viewSettings.fitMode);
           this.panX.set(p.viewSettings.panX);
@@ -315,16 +340,19 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       }
     });
 
+    // Reactively update boundaries when fitMode or scale changes
     effect(() => {
-        // Trigger boundaries update when visual params change
         const mode = this.fitMode(); 
         const s = this.imageScale();
+        // Small timeout to allow DOM to reflow if needed
         setTimeout(() => this.updateBoundaries(), 50);
     });
   }
 
   ngAfterViewInit() {
+      // Initial calculation
       this.updateBoundaries();
+      // Listen for window resize to recalculate limits
       window.addEventListener('resize', this.onResize);
   }
 
@@ -342,11 +370,13 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       if (!img) return;
 
       const scale = this.imageScale();
+      // Effective dimension is visually scaled
       const imgW = img.offsetWidth * scale;
       const imgH = img.offsetHeight * scale;
       const screenW = window.innerWidth;
       const screenH = window.innerHeight;
 
+      // Calculate overflow
       const overflowX = Math.max(0, imgW - screenW);
       const overflowY = Math.max(0, imgH - screenH);
 
@@ -357,9 +387,8 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   openSettings() { this.isSettingsOpen.set(true); this.uiVisible.set(true); }
   closeSettings() { this.isSettingsOpen.set(false); }
   onBackgroundClick(event: MouseEvent) { this.isSettingsOpen() ? this.closeSettings() : this.uiVisible.update(v => !v); }
+  togglePreview() { this.isSettingsOpen.set(false); this.uiVisible.set(false); }
   
-  // Removed togglePreview() since button is gone.
-
   resetSettings() { 
      this.panX.set(0); this.panY.set(0); 
      this.fitMode.set('height');
@@ -388,6 +417,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
 
   setFitMode(mode: FitMode) { 
       this.fitMode.set(mode); 
+      // Reset pan on fit change to prevent getting lost
       this.panX.set(0); 
       this.panY.set(0); 
   }
@@ -403,8 +433,10 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   updateScale(event: Event) {
       const val = parseFloat((event.target as HTMLInputElement).value);
       this.imageScale.set(val);
+      // Ensure clamp is re-run immediately in case we scaled down
       this.updateBoundaries();
       
+      // Clamp panX/panY to new boundaries immediately
       const limX = this.limitX();
       const limY = this.limitY();
       this.panX.update(x => Math.max(-limX, Math.min(x, limX)));
@@ -419,116 +451,44 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.showWallpaperMenu.set(false);
   }
 
-  private blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        const base64 = result.split(',')[1]; 
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
-// 🔥🔥🔥 修正版：改用 SettingsService 統一存檔
-async applyWallpaper(type: 'home' | 'lock' | 'both') {
-  this.closeWallpaperMenu();
-  const currentPhoto = this.photo();
-  this.toastMessage.set('處理中...');
-
-  try {
-      const effectiveStrength = this.motionEnabled() ? this.motionStrength() : 0;
-
-      // 1. 處理圖片檔案
-      let base64Data: string;
-      const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
-
-      if (sourcePath) {
-         const file = await Filesystem.readFile({ path: sourcePath });
-         base64Data = file.data as string;
-      } else if (currentPhoto.url) {
-         const response = await fetch(currentPhoto.url);
-         const blob = await response.blob();
-         base64Data = await this.blobToBase64(blob);
-      } else {
-         throw new Error('無法讀取照片');
-      }
-
-      // 統一存成單一檔案 (單圖模式下)
-      const fileName = `current_wallpaper_${Date.now()}.jpg`; 
-      const savedFile = await Filesystem.writeFile({
-        path: fileName,
-        data: base64Data,
-        directory: Directory.Data,
-        recursive: true
-      });
-      const nativePath = savedFile.uri.replace('file://', '');
-
-      // 2. 準備設定物件 (對應單圖模式)
-      // 這裡我們把單張圖視為一個「只有一張圖的播放清單」來處理，或是維持 mode='single'
-      // 為了讓 Service 的邏輯統一，我們可以更新 mode='single' 並把路徑存入 playlist
-      // 但為了最簡單的相容性，我們更新 mode='single' 並透過 SettingsService 更新
-
-      // 建立對應的 Config 物件
-      const photoConfig = {
-          motionStrength: effectiveStrength,
+  applyWallpaper(type: 'home' | 'lock' | 'both') {
+      this.closeWallpaperMenu();
+      
+      const config = {
+          photoId: this.photo().id,
+          photoUrl: this.photo().url,
           motionEnabled: this.motionEnabled(),
-          scale: this.imageScale(),
+          motionStrength: this.motionStrength(),
+          fitMode: this.fitMode(),
           panX: this.panX(),
-          panY: this.panY()
+          panY: this.panY(),
+          scale: this.imageScale()
       };
 
-      const updatePayload: any = {
-          mode: 'single', // 切換回單圖模式
-          // 更新全域參數以符合當前圖片
-          motionEnabled: this.motionEnabled(),
-          motionStrength: effectiveStrength,
-          targetFps: this.settingsService.settings().targetFps,
-          // 單圖模式下不需要 interval / sortOrder
-      };
+      try {
+          // 1. Save to Local Storage
+          const jsonString = JSON.stringify(config);
+          localStorage.setItem('LIVE_WALLPAPER_CONFIG', jsonString);
+          localStorage.setItem('LIVE_WALLPAPER_TIMESTAMP', Date.now().toString());
+          console.log('Wallpaper Configuration Saved:', config);
 
-      // 根據類型更新路徑
-      // 注意：單圖模式下，Service 主要讀取 'current_image_path' (由 Android 處理)
-      // 但為了保持我們的資料結構一致，我們也把這個路徑寫入 playlist 欄位
-      
-      if (type === 'home' || type === 'both') {
-          updatePayload.playlist = [nativePath];
-          updatePayload.playlistConfigs = [photoConfig];
-      }
-      
-      if (type === 'lock' || type === 'both') {
-          updatePayload.lock_playlist = [nativePath];
-          updatePayload.lock_playlistConfigs = [photoConfig];
-      }
-
-      // 3. 透過 Service 更新設定
-      this.settingsService.updateSettings(updatePayload);
-
-      // 4. 通知 Android
-      if ((window as any).Android) {
-          // 傳送設定 JSON (這一步其實 SettingsService 的 effect 已經做了，但為了保險可以再送一次)
-          // (window as any).Android.updateSettings(JSON.stringify(updatePayload)); // 可省略
-
-          if ((window as any).Android.setWallpaper) {
-              // 呼叫 Native 設定桌布 (這會觸發 WallpaperManager)
-              (window as any).Android.setWallpaper(nativePath);
+          // 2. Call Native Bridge (APK Ready)
+          if ((window as any).Android && (window as any).Android.setWallpaper) {
+              (window as any).Android.setWallpaper(jsonString);
               this.toastMessage.set('已發送設定至 Android 系統');
+          } else {
+             this.toastMessage.set('已儲存設定 (Bridge Inactive)');
           }
-      } else {
-         this.toastMessage.set('已儲存 (Bridge Inactive)');
+
+      } catch (e) {
+          console.error('Failed to save wallpaper config', e);
+          this.toastMessage.set('儲存失敗');
       }
 
-  } catch (e) {
-      console.error('Failed to set wallpaper', e);
-      this.toastMessage.set('設定失敗: ' + (e as any).message);
+      setTimeout(() => {
+          this.toastMessage.set(null);
+      }, 3000);
   }
-
-  setTimeout(() => {
-      this.toastMessage.set(null);
-  }, 3000);
-}
   
   // --- POINTER EVENTS (Drag & Pinch) ---
 
@@ -539,6 +499,7 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
 
     if (this.activePointers.length === 1) {
+        // Start Drag
         this.isDragging = true;
         this.startX = event.clientX;
         this.startY = event.clientY;
@@ -546,28 +507,34 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
         this.initialPanY = this.panY();
         this.updateBoundaries();
     } else if (this.activePointers.length === 2) {
+        // Start Pinch
         this.isPinching = true;
-        this.isDragging = false; 
+        this.isDragging = false; // Disable drag during pinch
         this.initialPinchDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
         this.initialScale = this.imageScale();
     }
   }
 
   onPointerMove(event: PointerEvent) {
+    // Update pointer record
     const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
     if (index !== -1) {
         this.activePointers[index] = event;
     }
 
     if (this.isPinching && this.activePointers.length === 2) {
+        // Handle Pinch
         const curDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
         if (this.initialPinchDist > 0) {
             const scaleFactor = curDist / this.initialPinchDist;
             let newScale = this.initialScale * scaleFactor;
+            
+            // Clamp Scale (1.0 to 3.0)
             newScale = Math.max(1.0, Math.min(newScale, 3.0));
             this.imageScale.set(newScale);
         }
     } else if (this.isDragging && this.activePointers.length === 1) {
+        // Handle Drag
         let newX = this.initialPanX + (event.clientX - this.startX);
         let newY = this.initialPanY + (event.clientY - this.startY);
         
@@ -583,6 +550,7 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
   }
 
   onPointerUp(event: PointerEvent) {
+      // Remove pointer
       const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
       if (index !== -1) {
           this.activePointers.splice(index, 1);
@@ -594,7 +562,10 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
       if (this.activePointers.length === 0) {
           this.isDragging = false;
       }
+      // If we dropped from 2 to 1 finger, we could resume dragging, 
+      // but usually better to reset drag state to avoid jumps.
       if (this.activePointers.length === 1) {
+          // Reset drag start reference to current position to avoid jump
           this.startX = this.activePointers[0].clientX;
           this.startY = this.activePointers[0].clientY;
           this.initialPanX = this.panX();
@@ -608,6 +579,7 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
   }
   
   onWheel(event: WheelEvent) {
+      // Allow mouse wheel zoom for desktop testing
       if (this.isSettingsOpen()) return;
       event.preventDefault();
       
@@ -619,6 +591,7 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
   }
 
   endDrag() { 
+      // Handled by onPointerUp mostly, but kept for compatibility
       if(this.activePointers.length === 0) this.isDragging = false; 
   }
 
@@ -647,10 +620,11 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
   }
 
   private handleOrientation = (event: DeviceOrientationEvent) => {
+    // 1. Check if Motion is globally or locally enabled
     if (!this.motionEnabled()) return;
 
-    // 🔥🔥 CENTRALIZED PAUSE CHECK 🔥🔥
-    // This stops gyro calculations when Power Save is active
+    // 2. CHECK CENTRALIZED PAUSE LOGIC (Pause on Power Save)
+    // If we are effectively paused, we stop updating the Gyro values.
     if (this.settingsService.isEffectivelyPaused()) {
         return; 
     }

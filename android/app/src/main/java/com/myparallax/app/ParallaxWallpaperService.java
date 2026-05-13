@@ -65,7 +65,6 @@ public class ParallaxWallpaperService extends WallpaperService {
         private boolean visible = false;
         private boolean isPowerSaveMode = false;
         private boolean isLocked = false;
-        private String currentNotificationStatus = "Active";
         
         private Bitmap currentBitmap;
         private float userScale = 1.0f;
@@ -111,8 +110,7 @@ public class ParallaxWallpaperService extends WallpaperService {
                 if ("com.myparallax.app.ACTION_UPDATE_WALLPAPER".equals(action)) {
                     loadSettings();
                 } else if ("com.myparallax.app.ACTION_UPDATE_NOTIFICATION".equals(action)) {
-                    String status = intent.getStringExtra("status");
-                    updateNotificationText(status);
+                    manageForegroundState();
                 } else if (Intent.ACTION_USER_PRESENT.equals(action) || 
                            Intent.ACTION_SCREEN_OFF.equals(action) || 
                            Intent.ACTION_SCREEN_ON.equals(action)) {
@@ -130,11 +128,7 @@ public class ParallaxWallpaperService extends WallpaperService {
                     if (isPowerSaveMode != newState) {
                         isPowerSaveMode = newState;
                         updateSensorState();
-                        if (isPowerSaveMode && pauseOnPowerSave) {
-                            updateNotificationText("paused");
-                        } else {
-                            updateNotificationText("active");
-                        }
+                        manageForegroundState();
                     }
                 }
             }
@@ -349,7 +343,7 @@ public class ParallaxWallpaperService extends WallpaperService {
                     }
                 }
 
-                handleForegroundService();
+                manageForegroundState();
                 
                 if (visible) {
                     handler.removeCallbacks(drawRunner);
@@ -436,29 +430,51 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
         }
 
-        private void handleForegroundService() {
+        private void manageForegroundState() {
+            ensureChannel();
             if (runInBackground) {
-                updateNotificationText(currentNotificationStatus);
+                Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+                PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
+
+                String contentText;
+                if (isPowerSaveMode && pauseOnPowerSave) {
+                    contentText = "前景運作暫停中 (省電模式)";
+                } else {
+                    contentText = isPlaylistMode ? "Parallax Studio 輪播中" : "Parallax Studio 執行中";
+                }
+
+                Notification notification = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID)
+                        .setContentTitle("Parallax Wallpaper")
+                        .setContentText(contentText)
+                        .setSmallIcon(android.R.drawable.ic_menu_gallery)
+                        .setContentIntent(pendingIntent)
+                        .setPriority(NotificationCompat.PRIORITY_LOW)
+                        .setOngoing(true)
+                        .build();
+                
+                try {
+                    startForeground(NOTIFICATION_ID, notification);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             } else {
                 stopForeground(true);
-                showPausedNotification();
-            }
-        }
 
-        private void showPausedNotification() {
-            ensureChannel();
-            Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-            PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
-            Notification notification = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID)
-                    .setContentTitle("Parallax Wallpaper")
-                    .setContentText("前景運作暫停中") 
-                    .setSmallIcon(android.R.drawable.ic_menu_gallery)
-                    .setContentIntent(pendingIntent)
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setOngoing(false) 
-                    .build();
-            NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) nm.notify(NOTIFICATION_ID, notification);
+                Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+                PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
+                Notification notification = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID)
+                        .setContentTitle("Parallax Wallpaper")
+                        .setContentText("前景運作暫停中")
+                        .setSmallIcon(android.R.drawable.ic_menu_gallery)
+                        .setContentIntent(pendingIntent)
+                        .setPriority(NotificationCompat.PRIORITY_LOW)
+                        .setOngoing(false)
+                        .build();
+                NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (nm != null) {
+                    nm.notify(NOTIFICATION_ID, notification);
+                }
+            }
         }
 
         private void ensureChannel() {
@@ -469,40 +485,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                     nm.createNotificationChannel(channel);
                 }
             }
-        }
-
-        private void updateNotificationText(String status) {
-            if (status == null) status = "active";
-            currentNotificationStatus = status.toLowerCase();
-
-            if (!runInBackground) {
-                showPausedNotification();
-                return; 
-            }
-
-            ensureChannel();
-            Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-            PendingIntent pendingIntent = PendingIntent.getActivity(getApplicationContext(), 0, intent, PendingIntent.FLAG_IMMUTABLE);
-
-            String contentText;
-            if (currentNotificationStatus.equals("paused")) {
-                contentText = "前景運作暫停中 (省電模式)";
-            } else {
-                contentText = isPlaylistMode ? "Parallax Studio 輪播中" : "Parallax Studio 執行中";
-            }
-
-            Notification notification = new NotificationCompat.Builder(getApplicationContext(), CHANNEL_ID)
-                    .setContentTitle("Parallax Wallpaper")
-                    .setContentText(contentText)
-                    .setSmallIcon(android.R.drawable.ic_menu_gallery)
-                    .setContentIntent(pendingIntent)
-                    .setPriority(NotificationCompat.PRIORITY_LOW)
-                    .setOngoing(true) 
-                    .build();
-            
-            try {
-                startForeground(NOTIFICATION_ID, notification);
-            } catch (Exception e) {}
         }
 
         @Override

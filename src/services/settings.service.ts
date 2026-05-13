@@ -1,113 +1,87 @@
-import { Injectable, signal, effect, computed, NgZone, inject } from '@angular/core';
 
-export type SortOrder = 'name_asc' | 'name_desc' | 'date_asc' | 'date_desc' | 'random' | 'custom';
+import { Injectable, signal, effect, computed } from '@angular/core';
+
 export type ThumbnailShape = 'squircle' | 'square' | 'rounded' | 'circle' | 'bevel' | 'leaf' | 'hexagon' | 'diamond';
 
 export interface AppSettings {
-  targetFps: number; 
+  targetFps: number; // 30, 60, 90, 120
+  
+  // Logic: Pauses rotation when system reports power save mode
   pauseOnPowerSave: boolean;
-  batteryOptimization: boolean; 
+  
+  // Logic: Tells Android to run as Foreground Service (Notification + Boot Start)
   runInBackground: boolean;
+
   globalMotionStrength: number;
   globalMotionEnabled: boolean;
+  
+  // New Visual Settings
   thumbnailShape: ThumbnailShape;
   thumbnailGap: number;
-  doubleTapToChange: boolean;
-
-  // 資料欄位
-  playlist?: string[];
-  playlistConfigs?: any[];
-  lock_playlist?: string[];
-  lock_playlistConfigs?: any[];
   
-  mode?: string;
-  sortOrder?: SortOrder;
-
-  // 🔥 [FIX] 拆分間隔設定，解決秒數互蓋問題
-  home_interval?: number; // 主畫面秒數
-  lock_interval?: number; // 鎖定畫面秒數
-  interval?: number;      // (保留作為單圖或其他用途的 fallback)
+  // Interaction Settings
+  doubleTapToChange: boolean;
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class SettingsService {
-  private zone = inject(NgZone);
-
+  // Reactive state for the System's actual Power Save status (pushed from Android)
   isSystemPowerSave = signal(false);
 
   settings = signal<AppSettings>({
-    targetFps: 120,
-    pauseOnPowerSave: true,       
-    batteryOptimization: false,   
-    runInBackground: true,        
-    globalMotionStrength: 2.0,    
-    globalMotionEnabled: true,    
+    targetFps: 60,
+    pauseOnPowerSave: true,
+    runInBackground: false, // Default false, user must enable
+    globalMotionStrength: 1.0,
+    globalMotionEnabled: true,
     thumbnailShape: 'squircle',
-    thumbnailGap: 8,              
-    doubleTapToChange: false,     
-    playlist: [],
-    playlistConfigs: [],
-    lock_playlist: [],
-    lock_playlistConfigs: [],
-    mode: 'single',
-    interval: 60,
-    sortOrder: 'custom',
-    
-    // 🔥 初始化
-    home_interval: 60,
-    lock_interval: 60
+    thumbnailGap: 16,
+    doubleTapToChange: false
   });
 
+  // CENTRAL LOGIC: Are we actually paused right now?
+  // Returns true ONLY IF: "Pause on Power Save" is ON AND "System Power Save" is ACTIVE.
   isEffectivelyPaused = computed(() => {
       return this.settings().pauseOnPowerSave && this.isSystemPowerSave();
   });
 
   constructor() {
-    (window as any).updatePowerSaveMode = (isActive: boolean) => {
-        this.zone.run(() => {
-            if (this.isSystemPowerSave() !== isActive) {
-                this.setSystemPowerSave(isActive);
-            }
-        });
-    };
-
+    // Attempt to load from localStorage
     const saved = localStorage.getItem('app_settings');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-
-        // 🔥🔥🔥 [FIX] 強制轉型：避免讀取到字串導致 FPS 拉桿跳回最小值
-        // 這是解決 FPS 120 -> 30 亂跳的關鍵！
-        if (parsed.targetFps) parsed.targetFps = Number(parsed.targetFps);
-        if (parsed.thumbnailGap) parsed.thumbnailGap = Number(parsed.thumbnailGap);
-        if (parsed.globalMotionStrength) parsed.globalMotionStrength = Number(parsed.globalMotionStrength);
-        
-        // 保護秒數設定
-        if (parsed.home_interval) parsed.home_interval = Number(parsed.home_interval);
-        if (parsed.lock_interval) parsed.lock_interval = Number(parsed.lock_interval);
-        if (parsed.interval) parsed.interval = Number(parsed.interval);
-
         this.settings.set({ ...this.settings(), ...parsed });
       } catch (e) {
         console.warn('Failed to parse settings', e);
       }
     }
 
+    // Auto-save & Sync to Native
     effect(() => {
       const json = JSON.stringify(this.settings());
       localStorage.setItem('app_settings', json);
+      
+      // Native Bridge Call 1: Update Settings Data
       if ((window as any).Android && (window as any).Android.updateSettings) {
           (window as any).Android.updateSettings(json);
       }
     });
 
+    // Effect: Update Notification Text based on "Effectively Paused" state
     effect(() => {
         const isPaused = this.isEffectivelyPaused();
+        
+        // Native Bridge Call 2: Update Service Notification Text
+        // If paused, Android should show "Paused in Power Save"
+        // If running, Android should show "Parallax Studio Running" or "Playlist Active"
         if ((window as any).Android && (window as any).Android.updateServiceNotification) {
             (window as any).Android.updateServiceNotification(isPaused ? 'paused' : 'active');
         }
+        
+        console.log(`[App State] Effectively Paused: ${isPaused}`);
     });
   }
 
@@ -115,6 +89,7 @@ export class SettingsService {
     this.settings.update(current => ({ ...current, ...partial }));
   }
 
+  // Method called by Native Android when system power save toggles
   setSystemPowerSave(isActive: boolean) {
     this.isSystemPowerSave.set(isActive);
   }
