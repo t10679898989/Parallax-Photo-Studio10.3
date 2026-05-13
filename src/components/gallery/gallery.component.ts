@@ -105,20 +105,6 @@ interface PhotoGroup {
 
                         <div class="flex items-center justify-between">
                             <div>
-                                <div class="font-medium text-white">Reduced Motion</div>
-                                <div class="text-xs text-slate-400 mt-1">簡化動畫運算，降低電池消耗</div>
-                            </div>
-                            <button class="w-12 h-6 rounded-full transition-colors relative" 
-                                [class.bg-emerald-600]="settings.settings().batteryOptimization" 
-                                [class.bg-slate-600]="!settings.settings().batteryOptimization" 
-                                (click)="updateSetting('batteryOptimization', !settings.settings().batteryOptimization)"
-                            >
-                                <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().batteryOptimization" [class.right-1]="settings.settings().batteryOptimization"></div>
-                            </button>
-                        </div>
-
-                        <div class="flex items-center justify-between">
-                            <div>
                                 <div class="font-medium text-white">Double Tap to Change</div>
                                 <div class="text-xs text-slate-400 mt-1">雙擊主螢幕即可更換桌布</div>
                             </div>
@@ -146,22 +132,12 @@ interface PhotoGroup {
                   </div>
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
-                      <div class="flex justify-between items-center mb-4">
-                          <h3 class="font-medium text-white flex items-center gap-2">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
-                              全域動態預設值 (Global Motion)
-                          </h3>
-                          <button 
-                              class="w-12 h-6 rounded-full transition-colors relative" 
-                              [class.bg-emerald-600]="settings.settings().globalMotionEnabled" 
-                              [class.bg-slate-600]="!settings.settings().globalMotionEnabled" 
-                              (click)="updateSetting('globalMotionEnabled', !settings.settings().globalMotionEnabled)"
-                          >
-                              <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().globalMotionEnabled" [class.right-1]="settings.settings().globalMotionEnabled"></div>
-                          </button>
-                      </div>
+                      <h3 class="font-medium text-white flex items-center gap-2 mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
+                          全域動態預設值 (Global Motion)
+                      </h3>
 
-                      <div class="space-y-4" [class.opacity-50]="!settings.settings().globalMotionEnabled" [class.pointer-events-none]="!settings.settings().globalMotionEnabled">
+                      <div class="space-y-4">
                           <div class="space-y-2">
                               <div class="flex justify-between text-sm text-slate-300">
                                   <span>強度 (Strength)</span>
@@ -1332,7 +1308,7 @@ export class GalleryComponent {
               // 建立個別設定 (Motion/Scale)
               const specificConfig = {
                   motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
-                  motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
+                  motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : true,
                   scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
                   panX: photo.viewSettings ? photo.viewSettings.panX : 0,
                   panY: photo.viewSettings ? photo.viewSettings.panY : 0
@@ -1410,10 +1386,7 @@ export class GalleryComponent {
 
           const updatePayload: any = {
               mode: 'playlist',
-              // 注意：不再寫入全域 interval，改寫入下方的 home_interval / lock_interval
               sortOrder: playlist.sortOrder,
-              // 強制更新全域參數以符合當前清單
-              motionEnabled: this.settings.settings().globalMotionEnabled,
               motionStrength: this.settings.settings().globalMotionStrength,
               targetFps: this.settings.settings().targetFps,
               doubleTapToChange: this.settings.settings().doubleTapToChange

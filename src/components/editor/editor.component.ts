@@ -293,7 +293,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         this.motionEnabled.set(p.motionSettings.enabled);
       } else {
         this.motionStrength.set(global.globalMotionStrength);
-        this.motionEnabled.set(global.globalMotionEnabled);
+        this.motionEnabled.set(true);
       }
 
       if (p.viewSettings) {
@@ -348,7 +348,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       const screenH = window.innerHeight;
 
       const overflowX = Math.max(0, imgW - screenW);
-      const overflowY = Math.max(0, imgH - screenH);
+      const overflowY =Math.max(0, imgH - screenH);
 
       this.limitX.set(overflowX / 2);
       this.limitY.set(overflowY / 2);
@@ -366,7 +366,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
      this.imageScale.set(1.0);
      const global = this.settingsService.settings();
      this.motionStrength.set(global.globalMotionStrength);
-     this.motionEnabled.set(global.globalMotionEnabled);
+     this.motionEnabled.set(true);
   }
 
   saveSettings() { 
@@ -483,7 +483,6 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
       const updatePayload: any = {
           mode: 'single', // 切換回單圖模式
           // 更新全域參數以符合當前圖片
-          motionEnabled: this.motionEnabled(),
           motionStrength: effectiveStrength,
           targetFps: this.settingsService.settings().targetFps,
           // 單圖模式下不需要 interval / sortOrder

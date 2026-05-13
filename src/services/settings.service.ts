@@ -9,7 +9,6 @@ export interface AppSettings {
   batteryOptimization: boolean; 
   runInBackground: boolean;
   globalMotionStrength: number;
-  globalMotionEnabled: boolean;
   thumbnailShape: ThumbnailShape;
   thumbnailGap: number;
   doubleTapToChange: boolean;
@@ -43,7 +42,6 @@ export class SettingsService {
     batteryOptimization: false,   
     runInBackground: true,        
     globalMotionStrength: 2.0,    
-    globalMotionEnabled: true,    
     thumbnailShape: 'squircle',
     thumbnailGap: 8,              
     doubleTapToChange: false,     
@@ -78,13 +76,10 @@ export class SettingsService {
       try {
         const parsed = JSON.parse(saved);
 
-        // 🔥🔥🔥 [FIX] 強制轉型：避免讀取到字串導致 FPS 拉桿跳回最小值
-        // 這是解決 FPS 120 -> 30 亂跳的關鍵！
         if (parsed.targetFps) parsed.targetFps = Number(parsed.targetFps);
         if (parsed.thumbnailGap) parsed.thumbnailGap = Number(parsed.thumbnailGap);
         if (parsed.globalMotionStrength) parsed.globalMotionStrength = Number(parsed.globalMotionStrength);
         
-        // 保護秒數設定
         if (parsed.home_interval) parsed.home_interval = Number(parsed.home_interval);
         if (parsed.lock_interval) parsed.lock_interval = Number(parsed.lock_interval);
         if (parsed.interval) parsed.interval = Number(parsed.interval);
