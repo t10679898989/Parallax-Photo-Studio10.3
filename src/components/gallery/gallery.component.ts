@@ -3,7 +3,6 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Photo, Playlist, PhotoService, SortOrder } from '../../services/photo.service';
 import { SettingsService, ThumbnailShape } from '../../services/settings.service';
-import { LazyImgDirective } from '../../directives/lazy-img.directive';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 interface DetailsState {
@@ -21,7 +20,6 @@ interface CreatePlaylistState {
   name: string;
 }
 
-// 🔥 [NEW] 分組結構介面
 interface PhotoGroup {
     batchId: number;
     title: string;
@@ -30,7 +28,7 @@ interface PhotoGroup {
 
 @Component({
   selector: 'app-gallery',
-  imports: [CommonModule, FormsModule, LazyImgDirective],
+  imports: [CommonModule, FormsModule],
   host: {
     'class': 'block h-full w-full overflow-hidden' 
   },
@@ -105,20 +103,6 @@ interface PhotoGroup {
 
                         <div class="flex items-center justify-between">
                             <div>
-                                <div class="font-medium text-white">Reduced Motion</div>
-                                <div class="text-xs text-slate-400 mt-1">簡化動畫運算，降低電池消耗</div>
-                            </div>
-                            <button class="w-12 h-6 rounded-full transition-colors relative" 
-                                [class.bg-emerald-600]="settings.settings().batteryOptimization" 
-                                [class.bg-slate-600]="!settings.settings().batteryOptimization" 
-                                (click)="updateSetting('batteryOptimization', !settings.settings().batteryOptimization)"
-                            >
-                                <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().batteryOptimization" [class.right-1]="settings.settings().batteryOptimization"></div>
-                            </button>
-                        </div>
-
-                        <div class="flex items-center justify-between">
-                            <div>
                                 <div class="font-medium text-white">Double Tap to Change</div>
                                 <div class="text-xs text-slate-400 mt-1">雙擊主螢幕即可更換桌布</div>
                             </div>
@@ -151,17 +135,9 @@ interface PhotoGroup {
                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
                               全域動態預設值 (Global Motion)
                           </h3>
-                          <button 
-                              class="w-12 h-6 rounded-full transition-colors relative" 
-                              [class.bg-emerald-600]="settings.settings().globalMotionEnabled" 
-                              [class.bg-slate-600]="!settings.settings().globalMotionEnabled" 
-                              (click)="updateSetting('globalMotionEnabled', !settings.settings().globalMotionEnabled)"
-                          >
-                              <div class="absolute top-1 bottom-1 w-4 bg-white rounded-full transition-transform" [class.left-1]="!settings.settings().globalMotionEnabled" [class.right-1]="settings.settings().globalMotionEnabled"></div>
-                          </button>
                       </div>
 
-                      <div class="space-y-4" [class.opacity-50]="!settings.settings().globalMotionEnabled" [class.pointer-events-none]="!settings.settings().globalMotionEnabled">
+                      <div class="space-y-4">
                           <div class="space-y-2">
                               <div class="flex justify-between text-sm text-slate-300">
                                   <span>強度 (Strength)</span>
@@ -276,7 +252,7 @@ interface PhotoGroup {
               </div>
           </div>
       } @else {
-      <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 min-h-[44px] shrink-0 p-4 md:p-6 pb-0">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 min-h-[44px] shrink-0 p-4 md:p-6 pb-0">
         @if (photoService.activePlaylistId()) {
             <div class="flex items-center gap-3 w-full">
                 <button (click)="exitPlaylist()" class="p-2 -ml-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors">
@@ -510,7 +486,7 @@ interface PhotoGroup {
                  <h3 class="text-xl font-bold text-white mb-4">建立播放清單</h3>
                  <div class="space-y-4">
                     <div class="space-y-2">
-                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">清單名稱</label>
+                        <label class="text-xs text-slate-400 font-bold uppercase tracking-wider">清單名称</label>
                         <input 
                             #playlistNameInput
                             type="text" 
@@ -680,7 +656,7 @@ interface PhotoGroup {
 
                           <div 
                               class="grid px-4" 
-                              [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'" 
+                              [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'"
                               [style.gap.px]="settings.settings().thumbnailGap"
                           >
                               @for (photo of group.items; track photo.id) {
@@ -698,7 +674,7 @@ interface PhotoGroup {
                                     }
 
                                     <img 
-                                      [appLazyLoad]="photo.url" 
+                                      [src]="photo.url" 
                                       class="w-full h-full object-cover pointer-events-none block"
                                       loading="lazy"
                                     >
@@ -723,7 +699,7 @@ interface PhotoGroup {
               } @else {
                   <div 
                       class="grid px-4 pt-4" 
-                      [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'" 
+                      [style.grid-template-columns]="'repeat(auto-fill, minmax(100px, 1fr))'"
                       [style.gap.px]="settings.settings().thumbnailGap"
                   >
                       @for (photo of currentPhotos; track photo.id) {
@@ -741,7 +717,7 @@ interface PhotoGroup {
                             }
 
                             <img 
-                              [appLazyLoad]="photo.url" 
+                              [src]="photo.url" 
                               class="w-full h-full object-cover pointer-events-none block"
                               loading="lazy"
                             >
@@ -806,13 +782,12 @@ interface PhotoGroup {
           </div>
         }
       </div>
-      
+      }
       @if (toastMessage()) {
           <div class="absolute bottom-12 left-1/2 -translate-x-1/2 z-[120] px-6 py-3 bg-slate-800/90 backdrop-blur-md rounded-full border border-slate-600 shadow-2xl animate-slide-up flex items-center gap-2 max-w-[90%] whitespace-nowrap">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             <span class="font-medium text-white text-sm">{{ toastMessage() }}</span>
           </div>
-      }
       }
     </div>
   `,
@@ -879,44 +854,33 @@ export class GalleryComponent {
     return this.playlists().find(p => p.id === this.photoService.activePlaylistId()) || null;
   });
 
-  // 🔥 [NEW] 分組邏輯：將照片依據 batchId 分組
   groupedPhotos = computed(() => {
       const allPhotos = this.photos();
       const groups = new Map<number, PhotoGroup>();
-      
-      // 未分類的批次 ID (給舊照片用)
       const UNKNOWN_BATCH = 0;
 
       allPhotos.forEach(photo => {
           const batchId = photo.batchId || UNKNOWN_BATCH;
-          
           if (!groups.has(batchId)) {
               let title = '早期匯入';
               if (batchId !== UNKNOWN_BATCH) {
                   const date = new Date(batchId);
                   title = date.toLocaleString('zh-TW', { 
-                      year: 'numeric', 
-                      month: '2-digit', 
-                      day: '2-digit', 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
+                      year: 'numeric', month: '2-digit', day: '2-digit', 
+                      hour: '2-digit', minute: '2-digit' 
                   }) + ' 匯入';
               }
               groups.set(batchId, { batchId, title, items: [] });
           }
           groups.get(batchId)?.items.push(photo);
       });
-
-      // 將 Map 轉為陣列，並依照批次時間倒序排列 (新的在上面)
       return Array.from(groups.values()).sort((a, b) => b.batchId - a.batchId);
   });
 
   activePlaylistPhotos = computed(() => {
       const playlist = this.activePlaylist();
       if (!playlist) return [];
-      
       let items = this.photos().filter(p => playlist.photoIds.includes(p.id));
-      
       switch (playlist.sortOrder) {
           case 'name_asc': return [...items].sort((a, b) => a.name.localeCompare(b.name));
           case 'name_desc': return [...items].sort((a, b) => b.name.localeCompare(a.name));
@@ -990,10 +954,8 @@ export class GalleryComponent {
     }
   }
 
-  // 🔥 [NEW] 批次全選功能
   selectBatch(group: PhotoGroup) {
       const batchIds = group.items.map(p => p.id);
-      // 將這一批的 ID 加入目前的選取清單 (Set 邏輯，避免重複)
       const current = new Set(this.selectedIds());
       batchIds.forEach(id => current.add(id));
       this.selectedIds.set(Array.from(current));
@@ -1022,7 +984,6 @@ export class GalleryComponent {
     if (event.button !== 0) return;
     this.pointerStartX = event.clientX;
     this.pointerStartY = event.clientY;
-
     this.longPressTimeout = setTimeout(() => {
       this.startSelectionMode(photoId);
     }, 400); 
@@ -1039,7 +1000,6 @@ export class GalleryComponent {
     if (this.isSelecting()) {
       const target = document.elementFromPoint(event.clientX, event.clientY);
       const photoEl = target?.closest('[data-id]');
-      
       if (photoEl) {
         const id = photoEl.getAttribute('data-id');
         if (id && !this.selectedIds().includes(id)) {
@@ -1108,7 +1068,6 @@ export class GalleryComponent {
   toggleSettings() { this.showSettings.update(v => !v); }
   
   updateSetting(k: string, v: any) { 
-      // 🔥 [FIX] 防呆：如果是 FPS 或 間隔，強制轉成數字再存
       if (['targetFps', 'thumbnailGap', 'globalMotionStrength'].includes(k)) {
           v = Number(v);
       }
@@ -1245,7 +1204,6 @@ export class GalleryComponent {
   requestDeletePlaylist() {
       const id = this.playlistSettingsState().playlistId;
       if (!id) return;
-
       this.pendingDeletePlaylistId.set(id);
       this.closePlaylistSettings();
       this.deletePlaylistConfirmVisible.set(true);
@@ -1308,31 +1266,25 @@ export class GalleryComponent {
     });
   }
 
-  // 🔥🔥🔥 修正版：支援獨立秒數設定 (Home/Lock 分開存)
   async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
       const playlist = this.activePlaylist();
       if (!playlist || playlist.photoIds.length === 0) {
         this.showToast('錯誤：播放清單是空的');
         return;
       }
-
       this.showToast(`處理中... 共 ${playlist.photoIds.length} 張照片 (${type.toUpperCase()})`);
-
       try {
           const playlistPaths: string[] = [];
           const playlistConfigs: any[] = []; 
           let newFilesCount = 0;
 
-          // --- 1. 圖片處理迴圈 (檢查快取、複製檔案) ---
           for (let i = 0; i < playlist.photoIds.length; i++) {
               const photoId = playlist.photoIds[i];
               const photo = this.getPhotoById(photoId);
               if (!photo) continue;
 
-              // 建立個別設定 (Motion/Scale)
               const specificConfig = {
                   motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
-                  motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : this.settings.settings().globalMotionEnabled,
                   scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
                   panX: photo.viewSettings ? photo.viewSettings.panX : 0,
                   panY: photo.viewSettings ? photo.viewSettings.panY : 0
@@ -1340,8 +1292,6 @@ export class GalleryComponent {
               playlistConfigs.push(specificConfig);
 
               const fileName = `cached_${photoId}.jpg`;
-              
-              // 檢查快取是否存在
               try {
                   const stat = await Filesystem.stat({
                       path: fileName,
@@ -1351,11 +1301,8 @@ export class GalleryComponent {
                   continue; 
               } catch (e) { }
 
-              // 準備來源路徑
               const sourcePath = (photo as any).path || (photo as any).webPath;
               let copySuccess = false;
-
-              // 嘗試直接複製 (效能較好)
               if (sourcePath && sourcePath.startsWith('file://')) {
                   try {
                       await Filesystem.copy({
@@ -1371,8 +1318,6 @@ export class GalleryComponent {
                       copySuccess = true;
                   } catch (copyError) {}
               }
-
-              // 如果複製失敗 (例如來自 Web 或相簿 URI)，則讀取並寫入
               if (!copySuccess) {
                   let base64Data: string;
                   if (sourcePath) {
@@ -1385,7 +1330,6 @@ export class GalleryComponent {
                   } else {
                       continue;
                   }
-
                   const savedFile = await Filesystem.writeFile({
                     path: fileName,
                     data: base64Data,
@@ -1394,53 +1338,33 @@ export class GalleryComponent {
                   });
                   playlistPaths.push(savedFile.uri.replace('file://', ''));
               }
-              
               newFilesCount++;
               if (newFilesCount % 10 === 0) {
                   this.showToast(`正在最佳化新照片... (${newFilesCount})`);
               }
           }
-
           if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
-
-          // --- 2. 準備設定 Payload ---
-          
-          // 取得當前清單設定的秒數
           const newInterval = playlist.interval || 60;
-
           const updatePayload: any = {
               mode: 'playlist',
-              // 注意：不再寫入全域 interval，改寫入下方的 home_interval / lock_interval
               sortOrder: playlist.sortOrder,
-              // 強制更新全域參數以符合當前清單
-              motionEnabled: this.settings.settings().globalMotionEnabled,
               motionStrength: this.settings.settings().globalMotionStrength,
               targetFps: this.settings.settings().targetFps,
               doubleTapToChange: this.settings.settings().doubleTapToChange
           };
-
-          // --- 3. 根據類型寫入對應欄位 (包含路徑與秒數) ---
-          
           if (type === 'home' || type === 'both') {
               updatePayload.playlist = playlistPaths;
               updatePayload.playlistConfigs = playlistConfigs;
-              updatePayload.home_interval = newInterval; // 🔥 寫入主畫面秒數
+              updatePayload.home_interval = newInterval;
           }
-          
           if (type === 'lock' || type === 'both') {
               updatePayload.lock_playlist = playlistPaths;
               updatePayload.lock_playlistConfigs = playlistConfigs;
-              updatePayload.lock_interval = newInterval; // 🔥 寫入鎖定畫面秒數
+              updatePayload.lock_interval = newInterval;
           }
-
-          // --- 4. 透過 Service 統一更新 (存檔 + 通知) ---
           this.settings.updateSettings(updatePayload);
-
-          // --- 5. 觸發 Android 桌布重整 ---
           if ((window as any).Android && (window as any).Android.setWallpaper) {
-              // 傳送第一張圖路徑是為了觸發 Service 的重繪機制
               (window as any).Android.setWallpaper(playlistPaths[0]);
-              
               if (newFilesCount === 0) {
                   this.showToast('設定成功！(秒速套用)');
               } else {
@@ -1449,7 +1373,6 @@ export class GalleryComponent {
           } else {
               this.showToast('已儲存 (Bridge Inactive)');
           }
-
       } catch (e) {
           console.error(e);
           this.showToast('設定失敗: ' + (e as any).message);
@@ -1475,8 +1398,6 @@ export class GalleryComponent {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
-
-  // --- NATIVE BACKUP & RESTORE ---
 
   downloadBackup() {
       const data = this.photoService.generateBackup();
@@ -1507,7 +1428,6 @@ export class GalleryComponent {
       if (input.files && input.files[0]) {
           const file = input.files[0];
           const reader = new FileReader();
-          
           reader.onload = (e) => {
               const content = e.target?.result as string;
               if (content) {
@@ -1515,7 +1435,6 @@ export class GalleryComponent {
                   this.showToast(result.message);
               }
           };
-          
           reader.readAsText(file);
       }
       input.value = ''; 

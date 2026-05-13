@@ -6,10 +6,8 @@ export type ThumbnailShape = 'squircle' | 'square' | 'rounded' | 'circle' | 'bev
 export interface AppSettings {
   targetFps: number; 
   pauseOnPowerSave: boolean;
-  batteryOptimization: boolean; 
   runInBackground: boolean;
   globalMotionStrength: number;
-  globalMotionEnabled: boolean;
   thumbnailShape: ThumbnailShape;
   thumbnailGap: number;
   doubleTapToChange: boolean;
@@ -23,7 +21,7 @@ export interface AppSettings {
   mode?: string;
   sortOrder?: SortOrder;
 
-  // 🔥 [FIX] 拆分間隔設定，解決秒數互蓋問題
+  // 拆分間隔設定
   home_interval?: number; // 主畫面秒數
   lock_interval?: number; // 鎖定畫面秒數
   interval?: number;      // (保留作為單圖或其他用途的 fallback)
@@ -40,10 +38,8 @@ export class SettingsService {
   settings = signal<AppSettings>({
     targetFps: 120,
     pauseOnPowerSave: true,       
-    batteryOptimization: false,   
     runInBackground: true,        
     globalMotionStrength: 2.0,    
-    globalMotionEnabled: true,    
     thumbnailShape: 'squircle',
     thumbnailGap: 8,              
     doubleTapToChange: false,     
@@ -55,7 +51,6 @@ export class SettingsService {
     interval: 60,
     sortOrder: 'custom',
     
-    // 🔥 初始化
     home_interval: 60,
     lock_interval: 60
   });
@@ -78,13 +73,10 @@ export class SettingsService {
       try {
         const parsed = JSON.parse(saved);
 
-        // 🔥🔥🔥 [FIX] 強制轉型：避免讀取到字串導致 FPS 拉桿跳回最小值
-        // 這是解決 FPS 120 -> 30 亂跳的關鍵！
         if (parsed.targetFps) parsed.targetFps = Number(parsed.targetFps);
         if (parsed.thumbnailGap) parsed.thumbnailGap = Number(parsed.thumbnailGap);
         if (parsed.globalMotionStrength) parsed.globalMotionStrength = Number(parsed.globalMotionStrength);
         
-        // 保護秒數設定
         if (parsed.home_interval) parsed.home_interval = Number(parsed.home_interval);
         if (parsed.lock_interval) parsed.lock_interval = Number(parsed.lock_interval);
         if (parsed.interval) parsed.interval = Number(parsed.interval);

@@ -93,7 +93,6 @@ type FitMode = 'height' | 'width';
              <div class="flex justify-between items-center">
                <label class="text-sm font-medium text-slate-300">
                   Motion Strength
-                  @if (!motionEnabled()) { <span class="text-slate-500 ml-2 text-xs">(Disabled)</span> }
                </label>
                <span 
                  class="text-xs font-mono transition-colors"
@@ -102,19 +101,6 @@ type FitMode = 'height' | 'width';
                >{{ motionStrength() }}x</span>
              </div>
              <div class="flex items-center gap-4">
-               <button 
-                  (click)="toggleMotion()" 
-                  class="p-3 rounded-xl border transition-colors relative overflow-hidden shrink-0"
-                  [class.bg-emerald-600]="isMotionVisuallyActive()"
-                  [class.border-emerald-500]="isMotionVisuallyActive()"
-                  [class.text-white]="isMotionVisuallyActive()"
-                  [class.bg-slate-800]="!isMotionVisuallyActive()"
-                  [class.border-slate-700]="!isMotionVisuallyActive()"
-                  [class.text-slate-400]="!isMotionVisuallyActive()"
-                  title="Toggle Motion"
-               >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
-               </button>
                <input 
                  type="range" min="0" max="5" step="0.1"
                  [value]="motionStrength()"
@@ -233,8 +219,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   imageScale = signal(1.0);
   
   motionStrength = signal(1.0);
-  motionEnabled = signal(false);
-  motionError = signal<string | null>(null);
 
   panX = signal(0);
   panY = signal(0);
@@ -262,7 +246,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   private lastFrameTime = 0;
   
   smoothness = computed(() => {
-    return this.settingsService.settings().batteryOptimization ? '100ms' : '50ms';
+    return '50ms';
   });
 
   transformStyle = computed(() => {
@@ -281,7 +265,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     return `translate3d(${finalX}px, ${finalY}px, 0) rotateX(${rx}deg) rotateY(${ry}deg) scale(${this.imageScale()})`;
   });
 
-  isMotionVisuallyActive = computed(() => this.motionEnabled() && this.motionStrength() > 0);
+  isMotionVisuallyActive = computed(() => this.motionStrength() > 0);
 
   constructor() {
     effect(() => {
@@ -290,10 +274,8 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
 
       if (p.motionSettings) {
         this.motionStrength.set(p.motionSettings.strength);
-        this.motionEnabled.set(p.motionSettings.enabled);
       } else {
         this.motionStrength.set(global.globalMotionStrength);
-        this.motionEnabled.set(global.globalMotionEnabled);
       }
 
       if (p.viewSettings) {
@@ -307,16 +289,9 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
           this.panY.set(0);
           this.imageScale.set(1.0);
       }
-
-      if (this.motionEnabled()) {
-        this.initMotionListener();
-      } else {
-        this.removeMotionListener();
-      }
     });
 
     effect(() => {
-        // Trigger boundaries update when visual params change
         const mode = this.fitMode(); 
         const s = this.imageScale();
         setTimeout(() => this.updateBoundaries(), 50);
@@ -326,6 +301,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   ngAfterViewInit() {
       this.updateBoundaries();
       window.addEventListener('resize', this.onResize);
+      this.initMotionListener();
   }
 
   ngOnDestroy() {
@@ -358,23 +334,19 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   closeSettings() { this.isSettingsOpen.set(false); }
   onBackgroundClick(event: MouseEvent) { this.isSettingsOpen() ? this.closeSettings() : this.uiVisible.update(v => !v); }
   
-  // Removed togglePreview() since button is gone.
-
   resetSettings() { 
      this.panX.set(0); this.panY.set(0); 
      this.fitMode.set('height');
      this.imageScale.set(1.0);
      const global = this.settingsService.settings();
      this.motionStrength.set(global.globalMotionStrength);
-     this.motionEnabled.set(global.globalMotionEnabled);
   }
 
   saveSettings() { 
     this.photoService.updatePhotoMotion(
         this.photo().id, 
         {
-            strength: this.motionStrength(),
-            enabled: this.motionEnabled()
+            strength: this.motionStrength()
         },
         {
             fitMode: this.fitMode(),
@@ -395,9 +367,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   updateStrength(event: Event) { 
       const val = parseFloat((event.target as HTMLInputElement).value); 
       this.motionStrength.set(val); 
-      if (!this.motionEnabled() && val > 0) {
-          this.toggleMotion(); 
-      }
   }
 
   updateScale(event: Event) {
@@ -432,16 +401,14 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     });
   }
 
-// 🔥🔥🔥 修正版：改用 SettingsService 統一存檔
 async applyWallpaper(type: 'home' | 'lock' | 'both') {
   this.closeWallpaperMenu();
   const currentPhoto = this.photo();
   this.toastMessage.set('處理中...');
 
   try {
-      const effectiveStrength = this.motionEnabled() ? this.motionStrength() : 0;
+      const effectiveStrength = this.motionStrength();
 
-      // 1. 處理圖片檔案
       let base64Data: string;
       const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
 
@@ -456,7 +423,6 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
          throw new Error('無法讀取照片');
       }
 
-      // 統一存成單一檔案 (單圖模式下)
       const fileName = `current_wallpaper_${Date.now()}.jpg`; 
       const savedFile = await Filesystem.writeFile({
         path: fileName,
@@ -466,33 +432,19 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
       });
       const nativePath = savedFile.uri.replace('file://', '');
 
-      // 2. 準備設定物件 (對應單圖模式)
-      // 這裡我們把單張圖視為一個「只有一張圖的播放清單」來處理，或是維持 mode='single'
-      // 為了讓 Service 的邏輯統一，我們可以更新 mode='single' 並把路徑存入 playlist
-      // 但為了最簡單的相容性，我們更新 mode='single' 並透過 SettingsService 更新
-
-      // 建立對應的 Config 物件
       const photoConfig = {
           motionStrength: effectiveStrength,
-          motionEnabled: this.motionEnabled(),
           scale: this.imageScale(),
           panX: this.panX(),
           panY: this.panY()
       };
 
       const updatePayload: any = {
-          mode: 'single', // 切換回單圖模式
-          // 更新全域參數以符合當前圖片
-          motionEnabled: this.motionEnabled(),
+          mode: 'single',
           motionStrength: effectiveStrength,
           targetFps: this.settingsService.settings().targetFps,
-          // 單圖模式下不需要 interval / sortOrder
       };
 
-      // 根據類型更新路徑
-      // 注意：單圖模式下，Service 主要讀取 'current_image_path' (由 Android 處理)
-      // 但為了保持我們的資料結構一致，我們也把這個路徑寫入 playlist 欄位
-      
       if (type === 'home' || type === 'both') {
           updatePayload.playlist = [nativePath];
           updatePayload.playlistConfigs = [photoConfig];
@@ -503,16 +455,10 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
           updatePayload.lock_playlistConfigs = [photoConfig];
       }
 
-      // 3. 透過 Service 更新設定
       this.settingsService.updateSettings(updatePayload);
 
-      // 4. 通知 Android
       if ((window as any).Android) {
-          // 傳送設定 JSON (這一步其實 SettingsService 的 effect 已經做了，但為了保險可以再送一次)
-          // (window as any).Android.updateSettings(JSON.stringify(updatePayload)); // 可省略
-
           if ((window as any).Android.setWallpaper) {
-              // 呼叫 Native 設定桌布 (這會觸發 WallpaperManager)
               (window as any).Android.setWallpaper(nativePath);
               this.toastMessage.set('已發送設定至 Android 系統');
           }
@@ -530,8 +476,6 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
   }, 3000);
 }
   
-  // --- POINTER EVENTS (Drag & Pinch) ---
-
   onPointerDown(event: PointerEvent) {
     if (this.isSettingsOpen()) return;
     
@@ -622,35 +566,9 @@ async applyWallpaper(type: 'home' | 'lock' | 'both') {
       if(this.activePointers.length === 0) this.isDragging = false; 
   }
 
-  async requestMotionPermission() {
-    this.motionError.set(null);
-    if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-      try {
-        const p = await (DeviceOrientationEvent as any).requestPermission();
-        if (p === 'granted') {
-          this.motionEnabled.set(true);
-          this.initMotionListener();
-        } else this.motionError.set('Denied.');
-      } catch (e) { this.motionError.set('Error.'); }
-    } else {
-      this.motionEnabled.set(true);
-      this.initMotionListener();
-    }
-  }
-
-  toggleMotion() {
-    if (this.motionEnabled()) {
-      this.motionEnabled.set(false);
-      this.gyroX.set(0); this.gyroY.set(0);
-      this.removeMotionListener();
-    } else this.requestMotionPermission();
-  }
-
   private handleOrientation = (event: DeviceOrientationEvent) => {
-    if (!this.motionEnabled()) return;
+    if (this.motionStrength() <= 0) return;
 
-    // 🔥🔥 CENTRALIZED PAUSE CHECK 🔥🔥
-    // This stops gyro calculations when Power Save is active
     if (this.settingsService.isEffectivelyPaused()) {
         return; 
     }

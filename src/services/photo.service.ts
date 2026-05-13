@@ -19,12 +19,10 @@ export interface Photo {
   caption?: string;
   motionSettings?: {
     strength: number;
-    enabled: boolean;
   };
   viewSettings?: ViewSettings;
   savedPath?: string;
   
-  // 🔥 [NEW] 新增：批次 ID 與時間戳記 (用於分組顯示)
   batchId?: number; 
   timestamp?: number;
 }
@@ -47,7 +45,6 @@ export interface BackupData {
   photos: Photo[];
 }
 
-// 🔥 [NEW] 進度條狀態介面
 export interface ImportProgress {
     current: number;
     total: number;
@@ -62,7 +59,6 @@ export class PhotoService {
   trash = signal<Photo[]>([]);
   playlists = signal<Playlist[]>([]);
   
-  // 🔥 [NEW] 匯入進度 Signal
   importProgress = signal<ImportProgress>({ current: 0, total: 0, isImporting: false });
 
   settingsService = inject(SettingsService);
@@ -86,8 +82,6 @@ export class PhotoService {
         localStorage.setItem(this.PLAYLIST_KEY, JSON.stringify(currentPlaylists));
     });
   }
-
-  // --- Persistence Logic ---
 
   private savePhotosToStorage(photos: Photo[]) {
       const dataToSave = photos.map(p => ({
@@ -149,29 +143,23 @@ export class PhotoService {
     });
   }
 
-  // --- Add Photos (Modified: 批次處理 + 進度條 + 逆序插入) ---
   async addPhotos(files: FileList | null): Promise<number> {
     if (!files || files.length === 0) return 0;
 
-    // 1. 初始化進度條
     this.importProgress.set({ current: 0, total: files.length, isImporting: true });
 
-    // 2. 產生批次 ID (使用當前時間戳)
     const currentBatchId = Date.now();
     const newPhotos: Photo[] = [];
 
-    // 3. 處理檔案
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // 更新進度 (+1 因為從 1 開始數比較直覺)
         this.importProgress.update(p => ({ ...p, current: i + 1 }));
 
         if (!file.type.startsWith('image/')) continue;
 
-        // 🔥 [FIX] 移除檔名重複檢查，無條件接收
         const id = this.generateId();
-        const fileName = `photo_${id}_${currentBatchId}.jpg`; // 檔名加入批次ID避免極端狀況重複
+        const fileName = `photo_${id}_${currentBatchId}.jpg`;
 
         try {
             const base64 = await this.fileToBase64(file);
@@ -195,8 +183,8 @@ export class PhotoService {
                 name: file.name,
                 size: file.size, 
                 savedPath: fileName,
-                batchId: currentBatchId, // 🔥 記錄批次 ID
-                timestamp: Date.now()    // 🔥 記錄匯入時間
+                batchId: currentBatchId,
+                timestamp: Date.now()
             });
 
         } catch (e) {
@@ -204,13 +192,10 @@ export class PhotoService {
         }
     }
 
-    // 4. 更新照片列表 (新圖插在最前面)
     if (newPhotos.length > 0) {
-        // 🔥 [FIX] 使用 unshift 邏輯：[...新圖, ...舊圖]
         this.photos.update(current => [...newPhotos, ...current]);
     }
     
-    // 5. 關閉進度條 (延遲一下讓使用者看到 100%)
     setTimeout(() => {
         this.importProgress.set({ current: 0, total: 0, isImporting: false });
     }, 500);
@@ -231,7 +216,6 @@ export class PhotoService {
       });
   }
 
-  // --- Delete Logic ---
   moveToTrash(ids: string[]) {
     const photosToTrash = this.photos().filter(p => ids.includes(p.id));
     this.trash.update(current => [...current, ...photosToTrash]);
@@ -269,7 +253,6 @@ export class PhotoService {
     this.trash.set([]);
   }
 
-  // --- Other Methods ---
   selectPhoto(id: string) { this.activePhotoId.set(id); }
   clearSelection() { this.activePhotoId.set(null); }
 
@@ -277,7 +260,7 @@ export class PhotoService {
     this.photos.update(photos => photos.map(p => p.id === id ? { ...p, caption } : p));
   }
 
-  updatePhotoMotion(id: string, motionSettings: { strength: number; enabled: boolean } | undefined, viewSettings?: ViewSettings) {
+  updatePhotoMotion(id: string, motionSettings: { strength: number; } | undefined, viewSettings?: ViewSettings) {
     this.photos.update(photos => photos.map(p => p.id === id ? { ...p, motionSettings, viewSettings } : p));
   }
 
@@ -325,10 +308,9 @@ export class PhotoService {
       );
   }
 
-  // --- BACKUP & RESTORE ---
   generateBackup(): string {
     const backup: BackupData = {
-      version: 3, // Bump version
+      version: 3,
       timestamp: Date.now(),
       globalSettings: this.settingsService.settings(),
       playlists: this.playlists(),
@@ -365,7 +347,7 @@ export class PhotoService {
                   caption: match.caption,
                   motionSettings: match.motionSettings,
                   viewSettings: match.viewSettings,
-                  batchId: match.batchId, // Restore batch info
+                  batchId: match.batchId,
                   timestamp: match.timestamp
               };
           }
