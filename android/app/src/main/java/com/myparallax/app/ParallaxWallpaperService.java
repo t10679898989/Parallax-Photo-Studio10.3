@@ -48,8 +48,8 @@ public class ParallaxWallpaperService extends WallpaperService {
         float motionStrength = 1.0f;
         boolean motionEnabled = true;
         float scale = 1.0f;
-        float panX = 0f;
-        float panY = 0f;
+        float panX = 0f; // 這裡內部儲存 Web 傳來的比例值
+        float panY = 0f; // 這裡內部儲存 Web 傳來的比例值
     }
 
     private class ParallaxEngine extends Engine implements SensorEventListener {
@@ -69,26 +69,28 @@ public class ParallaxWallpaperService extends WallpaperService {
         
         private Bitmap currentBitmap;
         private float userScale = 1.0f;
-        private float manualPanX = 0;
-        private float manualPanY = 0;
+        
+        // 🔥 將原本的 manualPanX 改為 Ratio 變數，儲存 -1.0 到 1.0 的相對比例值
+        private float manualPanRatioX = 0;
+        private float manualPanRatioY = 0;
         
         private boolean isPlaylistMode = false;
 
         private List<String> homePlaylistPaths = new ArrayList<>();
         private List<PhotoConfig> homePlaylistConfigs = new ArrayList<>();
         private int homePlaylistIndex = 0;
-        private int homeInterval = 60; // 🔥 新增：主畫面秒數
+        private int homeInterval = 60; 
 
         private List<String> lockPlaylistPaths = new ArrayList<>();
         private List<PhotoConfig> lockPlaylistConfigs = new ArrayList<>();
         private int lockPlaylistIndex = 0;
-        private int lockInterval = 60; // 🔥 新增：鎖定畫面秒數
+        private int lockInterval = 60; 
 
         private List<String> currentPlaylistPaths; 
         private List<PhotoConfig> currentPlaylistConfigs;
         private int currentPlaylistIndex = 0;
 
-        private int currentInterval = 60; // 🔥 當前使用的秒數
+        private int currentInterval = 60; 
         
         private float globalMotionStrength = 1.0f; 
         private float currentMotionStrength = 1.0f; 
@@ -214,12 +216,8 @@ public class ParallaxWallpaperService extends WallpaperService {
             playlistHandler.removeCallbacks(playlistRunner);
         }
 
-        // 🔥 核心修正：強制檢查狀態，避免卡頓
         private void checkLockState() {
-            // 每次呼叫都重新抓取鎖定狀態
             boolean newState = keyguardManager != null && keyguardManager.isKeyguardLocked();
-            
-            // 只要狀態改變，或者需要強制更新時
             if (isLocked != newState) {
                 isLocked = newState;
                 switchPlaylistSource();
@@ -229,21 +227,16 @@ public class ParallaxWallpaperService extends WallpaperService {
         private void switchPlaylistSource() {
             if (!isPlaylistMode) return;
 
-            // 1. 保存當前進度
-            if (!wasLocked()) { // 原本是 Home
+            if (!wasLocked()) { 
                 homePlaylistIndex = currentPlaylistIndex;
-            } else { // 原本是 Lock
+            } else { 
                 lockPlaylistIndex = currentPlaylistIndex;
             }
 
-            // 2. 決定新的資料來源 (包含 Interval 切換)
             resolvePlaylistSource();
 
-            // 3. 🔥🔥 立即載入新圖片 (解決解鎖後畫面卡住的問題)
-            // 不要等待 timer，直接執行換圖邏輯
             loadNextImageInternal(currentPlaylistIndex);
             
-            // 4. 重設輪播 Timer
             if (visible) {
                 playlistHandler.removeCallbacks(playlistRunner);
                 if (currentPlaylistPaths != null && currentPlaylistPaths.size() > 1) {
@@ -254,28 +247,24 @@ public class ParallaxWallpaperService extends WallpaperService {
 
         private void resolvePlaylistSource() {
             if (isLocked) {
-                // 鎖定模式
                 if (!lockPlaylistPaths.isEmpty()) {
                     currentPlaylistPaths = lockPlaylistPaths;
                     currentPlaylistConfigs = lockPlaylistConfigs;
                     currentPlaylistIndex = lockPlaylistIndex;
-                    currentInterval = lockInterval; // 🔥 使用 Lock Interval
+                    currentInterval = lockInterval; 
                 } else {
-                    // Fallback to Home
                     currentPlaylistPaths = homePlaylistPaths;
                     currentPlaylistConfigs = homePlaylistConfigs;
                     currentPlaylistIndex = homePlaylistIndex;
                     currentInterval = homeInterval;
                 }
             } else {
-                // 解鎖模式 (Home)
                 if (!homePlaylistPaths.isEmpty()) {
                     currentPlaylistPaths = homePlaylistPaths;
                     currentPlaylistConfigs = homePlaylistConfigs;
                     currentPlaylistIndex = homePlaylistIndex;
-                    currentInterval = homeInterval; // 🔥 使用 Home Interval
+                    currentInterval = homeInterval; 
                 } else {
-                    // Fallback to Lock (for preview)
                     currentPlaylistPaths = lockPlaylistPaths;
                     currentPlaylistConfigs = lockPlaylistConfigs;
                     currentPlaylistIndex = lockPlaylistIndex;
@@ -283,7 +272,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                 }
             }
 
-            // 安全檢查
             if (currentPlaylistPaths != null && !currentPlaylistPaths.isEmpty()) {
                 if (currentPlaylistIndex >= currentPlaylistPaths.size()) {
                     currentPlaylistIndex = 0;
@@ -306,8 +294,11 @@ public class ParallaxWallpaperService extends WallpaperService {
                 if (json.has("scale")) userScale = (float) json.getDouble("scale");
                 if (json.has("motionStrength")) globalMotionStrength = (float) json.getDouble("motionStrength");
                 if (json.has("motionEnabled")) globalMotionEnabled = json.optBoolean("motionEnabled", true);
-                if (json.has("panX")) manualPanX = (float) json.getDouble("panX");
-                if (json.has("panY")) manualPanY = (float) json.getDouble("panY");
+                
+                // 🔥 將單圖模式下傳進來的 panX / panY 當作比例讀取，並進行安全夾擠防呆
+                if (json.has("panX")) manualPanRatioX = Math.max(-1f, Math.min(1f, (float) json.getDouble("panX")));
+                if (json.has("panY")) manualPanRatioY = Math.max(-1f, Math.min(1f, (float) json.getDouble("panY")));
+                
                 if (json.has("targetFps")) targetFps = json.optInt("targetFps", 60);
                 if (json.has("runInBackground")) runInBackground = json.optBoolean("runInBackground", false);
                 if (json.has("pauseOnPowerSave")) pauseOnPowerSave = json.optBoolean("pauseOnPowerSave", true);
@@ -320,10 +311,8 @@ public class ParallaxWallpaperService extends WallpaperService {
                 currentMotionEnabled = globalMotionEnabled;
 
                 if (isPlaylistMode) {
-                    // 🔥 讀取分開的秒數設定
                     homeInterval = json.optInt("home_interval", 60);
                     lockInterval = json.optInt("lock_interval", 60);
-                    // 備援：如果新欄位不存在，讀舊的 interval
                     int legacyInterval = json.optInt("interval", 60);
                     if (!json.has("home_interval")) homeInterval = legacyInterval;
                     if (!json.has("lock_interval")) lockInterval = legacyInterval;
@@ -338,7 +327,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                         parsePlaylist(json, "lock_playlist", "lock_playlistConfigs", lockPlaylistPaths, lockPlaylistConfigs);
                     }
 
-                    // 重新判斷狀態並載入
                     isLocked = keyguardManager != null && keyguardManager.isKeyguardLocked();
                     switchPlaylistSource(); 
                     
@@ -381,8 +369,10 @@ public class ParallaxWallpaperService extends WallpaperService {
                                 config.motionStrength = (float) c.optDouble("motionStrength", globalMotionStrength);
                                 config.motionEnabled = c.optBoolean("motionEnabled", globalMotionEnabled);
                                 config.scale = (float) c.optDouble("scale", 1.1);
-                                config.panX = (float) c.optDouble("panX", 0);
-                                config.panY = (float) c.optDouble("panY", 0);
+                                
+                                // 🔥 解析播放清單內個別照片的 panX / panY 時，一併限制在比例範圍 [-1, 1] 內
+                                config.panX = Math.max(-1f, Math.min(1f, (float) c.optDouble("panX", 0)));
+                                config.panY = Math.max(-1f, Math.min(1f, (float) c.optDouble("panY", 0)));
                             }
                         }
                         configsList.add(config);
@@ -409,11 +399,15 @@ public class ParallaxWallpaperService extends WallpaperService {
                 currentMotionStrength = config.motionStrength;
                 currentMotionEnabled = config.motionEnabled;
                 userScale = config.scale; 
-                manualPanX = config.panX;
-                manualPanY = config.panY;
+                
+                // 🔥 輪播換圖時，將該圖設定的相對比例賦值給全域比例變數
+                manualPanRatioX = config.panX;
+                manualPanRatioY = config.panY;
             } else {
                 currentMotionStrength = globalMotionStrength;
                 currentMotionEnabled = globalMotionEnabled;
+                manualPanRatioX = 0;
+                manualPanRatioY = 0;
             }
             targetGyroX = 0; targetGyroY = 0;
             currentGyroX = 0; currentGyroY = 0;
@@ -509,9 +503,7 @@ public class ParallaxWallpaperService extends WallpaperService {
         public void onVisibilityChanged(boolean visible) {
             this.visible = visible;
             if (visible) {
-                // 🔥 每次可見時，強制檢查鎖定狀態並刷新
                 checkLockState(); 
-                
                 loadSettings(); 
                 updateSensorState();
                 if (isPlaylistMode) {
@@ -583,6 +575,10 @@ public class ParallaxWallpaperService extends WallpaperService {
                     float maxDx = (scaledImageWidth - screenWidth) / 2f;
                     float maxDy = (scaledImageHeight - screenHeight) / 2f;
 
+                    // 🔥🔥 核心修正：將 Web 端傳遞過來的相對百分比 Ratio，還原成當前 Android 裝置實際算出的絕對像素
+                    float manualPanX = manualPanRatioX * maxDx;
+                    float manualPanY = manualPanRatioY * maxDy;
+
                     if (currentMotionEnabled && currentMotionStrength > 0) {
                         currentGyroX += (targetGyroX - currentGyroX) * SMOOTHING_FACTOR;
                         currentGyroY += (targetGyroY - currentGyroY) * SMOOTHING_FACTOR;
@@ -591,6 +587,7 @@ public class ParallaxWallpaperService extends WallpaperService {
                         currentGyroY = 0;
                     }
 
+                    // 將經比例還原後的實體平移像素與陀螺儀偏移加總
                     float totalOffsetX = manualPanX + (currentGyroX * 30f * currentMotionStrength);
                     float totalOffsetY = manualPanY + (currentGyroY * 30f * currentMotionStrength);
 
