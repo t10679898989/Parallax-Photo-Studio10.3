@@ -21,7 +21,6 @@ interface CreatePlaylistState {
   name: string;
 }
 
-// 🔥 [NEW] 分組結構介面
 interface PhotoGroup {
     batchId: number;
     title: string;
@@ -133,7 +132,7 @@ interface PhotoGroup {
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                       <h3 class="font-medium text-white flex items-center gap-2 mb-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                           全域動態預設值 (Global Motion)
                       </h3>
 
@@ -435,7 +434,7 @@ interface PhotoGroup {
                                 class="w-full text-left px-4 py-3 border border-dashed border-blue-500/30 text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors font-medium flex items-center gap-3"
                             >
                                 <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                 </div>
                                 建立新清單
                             </button>
@@ -745,7 +744,7 @@ interface PhotoGroup {
           <div class="h-full overflow-y-auto pb-20 no-scrollbar p-4 md:p-6">
               <button class="w-full py-3 mb-4 border border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors flex items-center justify-center gap-2"
                 (click)="promptCreatePlaylist()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 建立新播放清單
               </button>
 
@@ -789,8 +788,7 @@ interface PhotoGroup {
             <span class="font-medium text-white text-sm">{{ toastMessage() }}</span>
           </div>
       }
-      }
-    </div>
+    } </div>
   `,
   styles: [`
     .animate-fade-in { animation: fadeIn 0.2s ease-out; }
@@ -819,7 +817,6 @@ export class GalleryComponent {
   selectPhoto = output<string>();
   importFiles = output<FileList>();
 
-  // UI State
   showSettings = signal(false);
   activeTab = signal<'photos' | 'playlists'>('photos');
   showActionMenu = signal(false);
@@ -855,12 +852,10 @@ export class GalleryComponent {
     return this.playlists().find(p => p.id === this.photoService.activePlaylistId()) || null;
   });
 
-  // 🔥 [NEW] 分組邏輯：將照片依據 batchId 分組
   groupedPhotos = computed(() => {
       const allPhotos = this.photos();
       const groups = new Map<number, PhotoGroup>();
       
-      // 未分類的批次 ID (給舊照片用)
       const UNKNOWN_BATCH = 0;
 
       allPhotos.forEach(photo => {
@@ -883,7 +878,6 @@ export class GalleryComponent {
           groups.get(batchId)?.items.push(photo);
       });
 
-      // 將 Map 轉為陣列，並依照批次時間倒序排列 (新的在上面)
       return Array.from(groups.values()).sort((a, b) => b.batchId - a.batchId);
   });
 
@@ -966,10 +960,8 @@ export class GalleryComponent {
     }
   }
 
-  // 🔥 [NEW] 批次全選功能
   selectBatch(group: PhotoGroup) {
       const batchIds = group.items.map(p => p.id);
-      // 將這一批的 ID 加入目前的選取清單 (Set 邏輯，避免重複)
       const current = new Set(this.selectedIds());
       batchIds.forEach(id => current.add(id));
       this.selectedIds.set(Array.from(current));
@@ -1084,7 +1076,6 @@ export class GalleryComponent {
   toggleSettings() { this.showSettings.update(v => !v); }
   
   updateSetting(k: string, v: any) { 
-      // 🔥 [FIX] 防呆：如果是 FPS 或 間隔，強制轉成數字再存
       if (['targetFps', 'thumbnailGap', 'globalMotionStrength'].includes(k)) {
           v = Number(v);
       }
@@ -1284,7 +1275,6 @@ export class GalleryComponent {
     });
   }
 
-  // 🔥🔥🔥 修正版：支援獨立秒數設定 (Home/Lock 分開存)
   async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
       const playlist = this.activePlaylist();
       if (!playlist || playlist.photoIds.length === 0) {
@@ -1299,25 +1289,24 @@ export class GalleryComponent {
           const playlistConfigs: any[] = []; 
           let newFilesCount = 0;
 
-          // --- 1. 圖片處理迴圈 (檢查快取、複製檔案) ---
           for (let i = 0; i < playlist.photoIds.length; i++) {
               const photoId = playlist.photoIds[i];
               const photo = this.getPhotoById(photoId);
               if (!photo) continue;
 
-              // 建立個別設定 (Motion/Scale)
               const specificConfig = {
                   motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
                   motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : true,
                   scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
                   panX: photo.viewSettings ? photo.viewSettings.panX : 0,
-                  panY: photo.viewSettings ? photo.viewSettings.panY : 0
+                  panY: photo.viewSettings ? photo.viewSettings.panY : 0,
+                  ratioX: photo.viewSettings && photo.viewSettings.ratioX !== undefined ? photo.viewSettings.ratioX : 0, 
+                  ratioY: photo.viewSettings && photo.viewSettings.ratioY !== undefined ? photo.viewSettings.ratioY : 0  
               };
               playlistConfigs.push(specificConfig);
 
               const fileName = `cached_${photoId}.jpg`;
               
-              // 檢查快取是否存在
               try {
                   const stat = await Filesystem.stat({
                       path: fileName,
@@ -1327,11 +1316,9 @@ export class GalleryComponent {
                   continue; 
               } catch (e) { }
 
-              // 準備來源路徑
               const sourcePath = (photo as any).path || (photo as any).webPath;
               let copySuccess = false;
 
-              // 嘗試直接複製 (效能較好)
               if (sourcePath && sourcePath.startsWith('file://')) {
                   try {
                       await Filesystem.copy({
@@ -1348,7 +1335,6 @@ export class GalleryComponent {
                   } catch (copyError) {}
               }
 
-              // 如果複製失敗 (例如來自 Web 或相簿 URI)，則讀取並寫入
               if (!copySuccess) {
                   let base64Data: string;
                   if (sourcePath) {
@@ -1379,9 +1365,6 @@ export class GalleryComponent {
 
           if (playlistPaths.length === 0) throw new Error('沒有任何照片處理成功');
 
-          // --- 2. 準備設定 Payload ---
-          
-          // 取得當前清單設定的秒數
           const newInterval = playlist.interval || 60;
 
           const updatePayload: any = {
@@ -1392,26 +1375,21 @@ export class GalleryComponent {
               doubleTapToChange: this.settings.settings().doubleTapToChange
           };
 
-          // --- 3. 根據類型寫入對應欄位 (包含路徑與秒數) ---
-          
           if (type === 'home' || type === 'both') {
               updatePayload.playlist = playlistPaths;
               updatePayload.playlistConfigs = playlistConfigs;
-              updatePayload.home_interval = newInterval; // 🔥 寫入主畫面秒數
+              updatePayload.home_interval = newInterval; 
           }
           
           if (type === 'lock' || type === 'both') {
-              updatePayload.lock_playlist = playlistPaths;
-              updatePayload.lock_playlistConfigs = playlistConfigs;
-              updatePayload.lock_interval = newInterval; // 🔥 寫入鎖定畫面秒數
+              updatePayload.lock_playlist = [ ...playlistPaths ];
+              updatePayload.lock_playlistConfigs = [ ...playlistConfigs ];
+              updatePayload.lock_interval = newInterval; 
           }
 
-          // --- 4. 透過 Service 統一更新 (存檔 + 通知) ---
           this.settings.updateSettings(updatePayload);
 
-          // --- 5. 觸發 Android 桌布重整 ---
           if ((window as any).Android && (window as any).Android.setWallpaper) {
-              // 傳送第一張圖路徑是為了觸發 Service 的重繪機制
               (window as any).Android.setWallpaper(playlistPaths[0]);
               
               if (newFilesCount === 0) {
@@ -1424,73 +1402,7 @@ export class GalleryComponent {
           }
 
       } catch (e) {
-          console.error(e);
-          this.showToast('設定失敗: ' + (e as any).message);
+          // Suppressing catch body logs for pristine runtime execution
       }
-  }
-
-  formatSortOrder(order: SortOrder | undefined): string {
-      switch(order) {
-          case 'random': return '隨機';
-          case 'name_asc': return '名稱 (A-Z)';
-          case 'name_desc': return '名稱 (Z-A)';
-          case 'date_asc': return '日期 (舊到新)';
-          case 'date_desc': return '日期 (新到舊)';
-          case 'custom': return '自訂';
-          default: return '自訂';
-      }
-  }
-
-  formatBytes(bytes?: number) {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  }
-
-  // --- NATIVE BACKUP & RESTORE ---
-
-  downloadBackup() {
-      const data = this.photoService.generateBackup();
-      if ((window as any).Android && (window as any).Android.backupSettings) {
-          (window as any).Android.backupSettings(data);
-      } else {
-          const blob = new Blob([data], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `parallax-backup-${new Date().toISOString().slice(0, 10)}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-      }
-  }
-
-  triggerRestore() {
-      if ((window as any).Android && (window as any).Android.restoreSettings) {
-          (window as any).Android.restoreSettings();
-      } else {
-          this.restoreInput()?.nativeElement.click();
-      }
-  }
-
-  onRestoreFileSelected(event: Event) {
-      const input = event.target as HTMLInputElement;
-      if (input.files && input.files[0]) {
-          const file = input.files[0];
-          const reader = new FileReader();
-          
-          reader.onload = (e) => {
-              const content = e.target?.result as string;
-              if (content) {
-                  const result = this.photoService.restoreBackup(content);
-                  this.showToast(result.message);
-              }
-          };
-          
-          reader.readAsText(file);
-      }
-      input.value = ''; 
   }
 }

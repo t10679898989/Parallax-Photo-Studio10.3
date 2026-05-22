@@ -48,8 +48,12 @@ public class ParallaxWallpaperService extends WallpaperService {
         float motionStrength = 1.0f;
         boolean motionEnabled = true;
         float scale = 1.0f;
-        float panX = 0f; // 這裡內部儲存 Web 傳來的比例值
-        float panY = 0f; // 這裡內部儲存 Web 傳來的比例值
+        float panX = 0f;
+        float panY = 0f;
+        // 🔥 [新合約] 儲存網頁端精確計算出的相對比例百分比
+        float ratioX = 0f;
+        float ratioY = 0f;
+        boolean hasRatio = false; 
     }
 
     private class ParallaxEngine extends Engine implements SensorEventListener {
@@ -70,9 +74,14 @@ public class ParallaxWallpaperService extends WallpaperService {
         private Bitmap currentBitmap;
         private float userScale = 1.0f;
         
-        // 🔥 將原本的 manualPanX 改為 Ratio 變數，儲存 -1.0 到 1.0 的相對比例值
+        // 舊合約絕對像素欄位 (留作向下相容備援)
+        private float manualPanX = 0;
+        private float manualPanY = 0;
+        
+        // 🔥 [新合約] 當前照片使用的相對比例與判斷標記
         private float manualPanRatioX = 0;
         private float manualPanRatioY = 0;
+        private boolean currentHasRatio = false;
         
         private boolean isPlaylistMode = false;
 
@@ -234,7 +243,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             }
 
             resolvePlaylistSource();
-
             loadNextImageInternal(currentPlaylistIndex);
             
             if (visible) {
@@ -291,14 +299,6 @@ public class ParallaxWallpaperService extends WallpaperService {
             try {
                 JSONObject json = new JSONObject(jsonStr);
                 
-                if (json.has("scale")) userScale = (float) json.getDouble("scale");
-                if (json.has("motionStrength")) globalMotionStrength = (float) json.getDouble("motionStrength");
-                if (json.has("motionEnabled")) globalMotionEnabled = json.optBoolean("motionEnabled", true);
-                
-                // 🔥 將單圖模式下傳進來的 panX / panY 當作比例讀取，並進行安全夾擠防呆
-                if (json.has("panX")) manualPanRatioX = Math.max(-1f, Math.min(1f, (float) json.getDouble("panX")));
-                if (json.has("panY")) manualPanRatioY = Math.max(-1f, Math.min(1f, (float) json.getDouble("panY")));
-                
                 if (json.has("targetFps")) targetFps = json.optInt("targetFps", 60);
                 if (json.has("runInBackground")) runInBackground = json.optBoolean("runInBackground", false);
                 if (json.has("pauseOnPowerSave")) pauseOnPowerSave = json.optBoolean("pauseOnPowerSave", true);
@@ -307,8 +307,16 @@ public class ParallaxWallpaperService extends WallpaperService {
                 String mode = json.optString("mode", "single");
                 isPlaylistMode = "playlist".equals(mode);
 
-                currentMotionStrength = globalMotionStrength;
-                currentMotionEnabled = globalMotionEnabled;
+                // 先解析播放清單內容
+                homePlaylistPaths.clear();
+                homePlaylistConfigs.clear();
+                parsePlaylist(json, "playlist", "playlistConfigs", homePlaylistPaths, homePlaylistConfigs);
+
+                lockPlaylistPaths.clear();
+                lockPlaylistConfigs.clear();
+                if (json.has("lock_playlist")) {
+                    parsePlaylist(json, "lock_playlist", "lock_playlistConfigs", lockPlaylistPaths, lockPlaylistConfigs);
+                }
 
                 if (isPlaylistMode) {
                     homeInterval = json.optInt("home_interval", 60);
@@ -317,16 +325,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                     if (!json.has("home_interval")) homeInterval = legacyInterval;
                     if (!json.has("lock_interval")) lockInterval = legacyInterval;
 
-                    homePlaylistPaths.clear();
-                    homePlaylistConfigs.clear();
-                    parsePlaylist(json, "playlist", "playlistConfigs", homePlaylistPaths, homePlaylistConfigs);
-
-                    lockPlaylistPaths.clear();
-                    lockPlaylistConfigs.clear();
-                    if (json.has("lock_playlist")) {
-                        parsePlaylist(json, "lock_playlist", "lock_playlistConfigs", lockPlaylistPaths, lockPlaylistConfigs);
-                    }
-
                     isLocked = keyguardManager != null && keyguardManager.isKeyguardLocked();
                     switchPlaylistSource(); 
                     
@@ -334,6 +332,32 @@ public class ParallaxWallpaperService extends WallpaperService {
                     playlistHandler.removeCallbacks(playlistRunner); 
                     if (!singleImagePath.isEmpty()) {
                         loadImage(singleImagePath);
+                    }
+                    
+                    // 🔥 [單圖模式防呆] 從前端傳遞的單圖結構中萃取新舊合約參數
+                    resolvePlaylistSource();
+                    int index = isLocked ? lockPlaylistIndex : homePlaylistIndex;
+                    if (currentPlaylistConfigs != null && !currentPlaylistConfigs.isEmpty()) {
+                        if (index >= currentPlaylistConfigs.size()) index = 0;
+                        PhotoConfig config = currentPlaylistConfigs.get(index);
+                        currentMotionStrength = config.motionStrength;
+                        currentMotionEnabled = config.motionEnabled;
+                        userScale = config.scale;
+                        manualPanX = config.panX;
+                        manualPanY = config.panY;
+                        manualPanRatioX = config.ratioX;
+                        manualPanRatioY = config.ratioY;
+                        currentHasRatio = config.hasRatio;
+                    } else {
+                        // 根節點舊資料降級相容機制
+                        userScale = json.has("scale") ? (float) json.getDouble("scale") : 1.0f;
+                        currentMotionStrength = json.has("motionStrength") ? (float) json.getDouble("motionStrength") : 1.0f;
+                        currentMotionEnabled = json.optBoolean("motionEnabled", true);
+                        manualPanX = json.has("panX") ? (float) json.getDouble("panX") : 0f;
+                        manualPanY = json.has("panY") ? (float) json.getDouble("panY") : 0f;
+                        manualPanRatioX = 0f;
+                        manualPanRatioY = 0f;
+                        currentHasRatio = false;
                     }
                 }
 
@@ -359,20 +383,27 @@ public class ParallaxWallpaperService extends WallpaperService {
                         pathsList.add(paths.getString(i));
                         
                         PhotoConfig config = new PhotoConfig();
-                        config.motionStrength = globalMotionStrength;
-                        config.motionEnabled = globalMotionEnabled;
+                        config.motionStrength = json.has("motionStrength") ? (float) json.getDouble("motionStrength") : 1.0f;
+                        config.motionEnabled = json.optBoolean("motionEnabled", true);
                         config.scale = 1.1f; 
 
                         if (configs != null && i < configs.length()) {
                             JSONObject c = configs.optJSONObject(i);
                             if (c != null) {
-                                config.motionStrength = (float) c.optDouble("motionStrength", globalMotionStrength);
-                                config.motionEnabled = c.optBoolean("motionEnabled", globalMotionEnabled);
+                                config.motionStrength = (float) c.optDouble("motionStrength", config.motionStrength);
+                                config.motionEnabled = c.optBoolean("motionEnabled", config.motionEnabled);
                                 config.scale = (float) c.optDouble("scale", 1.1);
+                                config.panX = (float) c.optDouble("panX", 0);
+                                config.panY = (float) c.optDouble("panY", 0);
                                 
-                                // 🔥 解析播放清單內個別照片的 panX / panY 時，一併限制在比例範圍 [-1, 1] 內
-                                config.panX = Math.max(-1f, Math.min(1f, (float) c.optDouble("panX", 0)));
-                                config.panY = Math.max(-1f, Math.min(1f, (float) c.optDouble("panY", 0)));
+                                // 🔥 [新合約解析] 讀取 ratioX 與 ratioY
+                                if (c.has("ratioX") || c.has("ratioY")) {
+                                    config.ratioX = (float) c.optDouble("ratioX", 0);
+                                    config.ratioY = (float) c.optDouble("ratioY", 0);
+                                    config.hasRatio = true;
+                                } else {
+                                    config.hasRatio = false;
+                                }
                             }
                         }
                         configsList.add(config);
@@ -399,15 +430,21 @@ public class ParallaxWallpaperService extends WallpaperService {
                 currentMotionStrength = config.motionStrength;
                 currentMotionEnabled = config.motionEnabled;
                 userScale = config.scale; 
+                manualPanX = config.panX;
+                manualPanY = config.panY;
                 
-                // 🔥 輪播換圖時，將該圖設定的相對比例賦值給全域比例變數
-                manualPanRatioX = config.panX;
-                manualPanRatioY = config.panY;
+                // 🔥 輪播換圖時，將該圖設定的相對比例與標記同步到引擎變數中
+                manualPanRatioX = config.ratioX;
+                manualPanRatioY = config.ratioY;
+                currentHasRatio = config.hasRatio;
             } else {
-                currentMotionStrength = globalMotionStrength;
-                currentMotionEnabled = globalMotionEnabled;
+                currentMotionStrength = json.has("motionStrength") ? (float) json.getDouble("motionStrength") : 1.0f;
+                currentMotionEnabled = json.optBoolean("motionEnabled", true);
+                manualPanX = 0;
+                manualPanY = 0;
                 manualPanRatioX = 0;
                 manualPanRatioY = 0;
+                currentHasRatio = false;
             }
             targetGyroX = 0; targetGyroY = 0;
             currentGyroX = 0; currentGyroY = 0;
@@ -575,9 +612,19 @@ public class ParallaxWallpaperService extends WallpaperService {
                     float maxDx = (scaledImageWidth - screenWidth) / 2f;
                     float maxDy = (scaledImageHeight - screenHeight) / 2f;
 
-                    // 🔥🔥 核心修正：將 Web 端傳遞過來的相對百分比 Ratio，還原成當前 Android 裝置實際算出的絕對像素
-                    float manualPanX = manualPanRatioX * maxDx;
-                    float manualPanY = manualPanRatioY * maxDy;
+                    // 🔥 [新合約核心處理] 
+                    float targetPanX = 0f;
+                    float targetPanY = 0f;
+
+                    if (currentHasRatio) {
+                        // 如果具備新合約比例，直接用百分比乘以當前裝置的最大移動上限，達到完美的跨裝置 WYSIWYG
+                        targetPanX = manualPanRatioX * maxDx;
+                        targetPanY = manualPanRatioY * maxDy;
+                    } else {
+                        // 否則降級相容舊有實體像素設定，並進行夾擠限制
+                        targetPanX = Math.max(-maxDx, Math.min(manualPanX, maxDx));
+                        targetPanY = Math.max(-maxDy, Math.min(manualPanY, maxDy));
+                    }
 
                     if (currentMotionEnabled && currentMotionStrength > 0) {
                         currentGyroX += (targetGyroX - currentGyroX) * SMOOTHING_FACTOR;
@@ -587,9 +634,9 @@ public class ParallaxWallpaperService extends WallpaperService {
                         currentGyroY = 0;
                     }
 
-                    // 將經比例還原後的實體平移像素與陀螺儀偏移加總
-                    float totalOffsetX = manualPanX + (currentGyroX * 30f * currentMotionStrength);
-                    float totalOffsetY = manualPanY + (currentGyroY * 30f * currentMotionStrength);
+                    // 合併拖曳定位與陀螺儀即時震盪偏移量
+                    float totalOffsetX = targetPanX + (currentGyroX * 30f * currentMotionStrength);
+                    float totalOffsetY = targetPanY + (currentGyroY * 30f * currentMotionStrength);
 
                     float finalOffsetX = Math.max(-maxDx, Math.min(totalOffsetX, maxDx));
                     float finalOffsetY = Math.max(-maxDy, Math.min(totalOffsetY, maxDy));

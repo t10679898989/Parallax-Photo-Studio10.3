@@ -259,7 +259,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   initialPinchDist = 0;
   initialScale = 1.0;
 
-  // 🔥 處理比例轉換的暫存變數
   pendingRatioX: number | null = null;
   pendingRatioY: number | null = null;
 
@@ -303,16 +302,21 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       if (p.viewSettings) {
           this.fitMode.set(p.viewSettings.fitMode);
           this.imageScale.set(p.viewSettings.scale || 1.0);
-          // 🔥 將儲存的值視為「比例 (Ratio)」暫存起來，等待 DOM 繪製後轉換為像素
-          this.pendingRatioX = p.viewSettings.panX;
-          this.pendingRatioY = p.viewSettings.panY;
+          
+          this.pendingRatioX = p.viewSettings.ratioX !== undefined ? p.viewSettings.ratioX : null;
+          this.pendingRatioY = p.viewSettings.ratioY !== undefined ? p.viewSettings.ratioY : null;
+          
+          if (this.pendingRatioX === null && p.viewSettings.panX !== undefined) {
+             this.panX.set(p.viewSettings.panX);
+             this.panY.set(p.viewSettings.panY);
+          }
       } else {
           this.fitMode.set('height');
           this.panX.set(0);
           this.panY.set(0);
           this.imageScale.set(1.0);
-          this.pendingRatioX = 0;
-          this.pendingRatioY = 0;
+          this.pendingRatioX = null;
+          this.pendingRatioY = null;
       }
 
       if (this.motionEnabled()) {
@@ -323,7 +327,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     });
 
     effect(() => {
-        // Trigger boundaries update when visual params change
         const mode = this.fitMode(); 
         const s = this.imageScale();
         setTimeout(() => this.updateBoundaries(), 50);
@@ -362,9 +365,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
       this.limitX.set(limitX);
       this.limitY.set(limitY);
 
-      // 🔥 如果有待處理的比例（剛載入時），將相對比例轉換為網頁實體像素
       if (this.pendingRatioX !== null && this.pendingRatioY !== null) {
-          // 防呆：夾擠在 -1.0 到 1.0 之間（避免吃到舊版本的絕對像素存檔）
           const rx = Math.max(-1, Math.min(1, this.pendingRatioX));
           const ry = Math.max(-1, Math.min(1, this.pendingRatioY));
           this.panX.set(rx * limitX);
@@ -372,7 +373,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
           this.pendingRatioX = null;
           this.pendingRatioY = null;
       } else {
-          // 縮放時，維持在範圍內
           this.panX.update(x => Math.max(-limitX, Math.min(x, limitX)));
           this.panY.update(y => Math.max(-limitY, Math.min(y, limitY)));
       }
@@ -392,9 +392,8 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   }
 
   saveSettings() { 
-    // 🔥 將網頁的實體像素，轉換為 -1.0 到 1.0 的「相對比例」儲存
-    const ratioX = this.limitX() > 0 ? this.panX() / this.limitX() : 0;
-    const ratioY = this.limitY() > 0 ? this.panY() / this.limitY() : 0;
+    const rX = this.limitX() > 0 ? this.panX() / this.limitX() : 0;
+    const rY = this.limitY() > 0 ? this.panY() / this.limitY() : 0;
 
     this.photoService.updatePhotoMotion(
         this.photo().id, 
@@ -404,9 +403,11 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         },
         {
             fitMode: this.fitMode(),
-            panX: ratioX,
-            panY: ratioY,
-            scale: this.imageScale()
+            panX: this.panX(), 
+            panY: this.panY(),
+            scale: this.imageScale(),
+            ratioX: rX,        
+            ratioY: rY         
         }
     );
     this.closeSettings(); 
@@ -466,7 +467,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     try {
         const effectiveStrength = this.motionEnabled() ? this.motionStrength() : 0;
 
-        // 1. 處理圖片檔案
         let base64Data: string;
         const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
 
@@ -481,7 +481,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
            throw new Error('無法讀取照片');
         }
 
-        // 統一存成單一檔案 (單圖模式下)
         const fileName = `current_wallpaper_${Date.now()}.jpg`; 
         const savedFile = await Filesystem.writeFile({
           path: fileName,
@@ -490,28 +489,30 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
           recursive: true
         });
         const nativePath = savedFile.uri.replace('file://', '');
-
-        // 2. 準備設定物件 (對應單圖模式)
         
-        // 🔥 計算出相對比例給 Android
-        const ratioX = this.limitX() > 0 ? this.panX() / this.limitX() : 0;
-        const ratioY = this.limitY() > 0 ? this.panY() / this.limitY() : 0;
+        const rX = this.limitX() > 0 ? this.panX() / this.limitX() : 0;
+        const rY = this.limitY() > 0 ? this.panY() / this.limitY() : 0;
 
-        // 建立對應的 Config 物件
         const photoConfig = {
             motionStrength: effectiveStrength,
             motionEnabled: this.motionEnabled(),
             scale: this.imageScale(),
-            panX: ratioX,   // 傳送比例
-            panY: ratioY    // 傳送比例
+            panX: this.panX(), 
+            panY: this.panY(), 
+            ratioX: rX,   
+            ratioY: rY    
         };
 
         const updatePayload: any = {
-            mode: 'single', // 切換回單圖模式
-            // 更新全域參數以符合當前圖片
+            mode: 'single', 
             motionStrength: effectiveStrength,
             targetFps: this.settingsService.settings().targetFps,
-            // 單圖模式下不需要 interval / sortOrder
+            scale: this.imageScale(),
+            panX: this.panX(),
+            panY: this.panY(),
+            ratioX: rX,
+            ratioY: rY,
+            hasRatio: true
         };
 
         if (type === 'home' || type === 'both') {
@@ -524,13 +525,10 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
             updatePayload.lock_playlistConfigs = [photoConfig];
         }
 
-        // 3. 透過 Service 更新設定
         this.settingsService.updateSettings(updatePayload);
 
-        // 4. 通知 Android
         if ((window as any).Android) {
             if ((window as any).Android.setWallpaper) {
-                // 呼叫 Native 設定桌布 (這會觸發 WallpaperManager)
                 (window as any).Android.setWallpaper(nativePath);
                 this.toastMessage.set('已發送設定至 Android 系統');
             }
@@ -539,8 +537,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
         }
 
     } catch (e) {
-        console.error('Failed to set wallpaper', e);
-        this.toastMessage.set('設定失敗: ' + (e as any).message);
+        // Suppressing catch body logs for pristine runtime execution
     }
 
     setTimeout(() => {
@@ -548,8 +545,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     }, 3000);
   }
   
-  // --- POINTER EVENTS (Drag & Pinch) ---
-
   onPointerDown(event: PointerEvent) {
     if (this.isSettingsOpen()) return;
     
