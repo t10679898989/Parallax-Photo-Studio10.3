@@ -217,7 +217,7 @@ interface PhotoGroup {
                            清空全部
                         </button>
                         <button (click)="restoreAllTrash()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2">
-                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                           <svg xmlns="http://www.w3.org/2000/xl" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
                            全部還原
                         </button>
                       </div>
@@ -788,7 +788,8 @@ interface PhotoGroup {
             <span class="font-medium text-white text-sm">{{ toastMessage() }}</span>
           </div>
       }
-    } </div>
+      }
+    </div> 
   `,
   styles: [`
     .animate-fade-in { animation: fadeIn 0.2s ease-out; }
@@ -982,8 +983,10 @@ export class GalleryComponent {
   }
   
   showToast(msg: string) {
-      this.toastMessage.set(msg);
-      setTimeout(() => this.toastMessage.set(null), 3000);
+      this.zone.run(() => {
+          this.toastMessage.set(msg);
+          setTimeout(() => this.toastMessage.set(null), 3000);
+      });
   }
 
   onPointerDown(event: PointerEvent, photoId: string) {
@@ -1107,15 +1110,17 @@ export class GalleryComponent {
   }
 
   confirmCreatePlaylist() {
-      const name = this.createPlaylistState().name.trim();
-      if (name) {
-          const newId = this.photoService.createPlaylist(name);
-          if (this.selectedIds().length > 0) {
-              this.photoService.addToPlaylist(newId, this.selectedIds());
+      this.zone.run(() => {
+          const name = this.createPlaylistState().name.trim();
+          if (name) {
+              const newId = this.photoService.createPlaylist(name);
+              if (this.selectedIds().length > 0) {
+                  this.photoService.addToPlaylist(newId, this.selectedIds());
+              }
               this.clearSelection();
           }
-      }
-      this.cancelCreatePlaylist();
+          this.cancelCreatePlaylist();
+      });
   }
 
   cancelCreatePlaylist() {
@@ -1175,22 +1180,28 @@ export class GalleryComponent {
   }
 
   enterPlaylist(id: string) {
-      this.photoService.activePlaylistId.set(id);
-      this.clearSelection();
+      this.zone.run(() => {
+          this.photoService.activePlaylistId.set(id);
+          this.clearSelection();
+      });
   }
 
   exitPlaylist() {
-      this.photoService.activePlaylistId.set(null);
-      this.clearSelection();
+      this.zone.run(() => {
+          this.photoService.activePlaylistId.set(null);
+          this.clearSelection();
+      });
   }
 
   openPlaylistSettings() {
-      const pl = this.activePlaylist();
-      if (!pl) return;
-      this.tempPlaylistName = pl.name;
-      this.tempPlaylistInterval = pl.interval;
-      this.tempSortOrder = pl.sortOrder;
-      this.playlistSettingsState.set({ visible: true, playlistId: pl.id });
+      this.zone.run(() => {
+          const pl = this.activePlaylist();
+          if (!pl) return;
+          this.tempPlaylistName = pl.name;
+          this.tempPlaylistInterval = pl.interval || 60;
+          this.tempSortOrder = pl.sortOrder || 'custom';
+          this.playlistSettingsState.set({ visible: true, playlistId: pl.id });
+      });
   }
 
   closePlaylistSettings() {
@@ -1402,7 +1413,8 @@ export class GalleryComponent {
           }
 
       } catch (e) {
-          // Suppressing catch body logs for pristine runtime execution
+          console.error(e);
+          this.showToast('設定失敗: ' + (e as any).message);
       }
   }
 }
