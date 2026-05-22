@@ -21,6 +21,7 @@ interface CreatePlaylistState {
   name: string;
 }
 
+// 🔥 [NEW] 分組結構介面
 interface PhotoGroup {
     batchId: number;
     title: string;
@@ -132,7 +133,7 @@ interface PhotoGroup {
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                       <h3 class="font-medium text-white flex items-center gap-2 mb-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
                           全域動態預設值 (Global Motion)
                       </h3>
 
@@ -217,7 +218,7 @@ interface PhotoGroup {
                            清空全部
                         </button>
                         <button (click)="restoreAllTrash()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2">
-                           <svg xmlns="http://www.w3.org/2000/xl" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
                            全部還原
                         </button>
                       </div>
@@ -789,7 +790,7 @@ interface PhotoGroup {
           </div>
       }
       }
-    </div> 
+    </div>
   `,
   styles: [`
     .animate-fade-in { animation: fadeIn 0.2s ease-out; }
@@ -818,6 +819,7 @@ export class GalleryComponent {
   selectPhoto = output<string>();
   importFiles = output<FileList>();
 
+  // UI State
   showSettings = signal(false);
   activeTab = signal<'photos' | 'playlists'>('photos');
   showActionMenu = signal(false);
@@ -853,10 +855,12 @@ export class GalleryComponent {
     return this.playlists().find(p => p.id === this.photoService.activePlaylistId()) || null;
   });
 
+  // 🔥 [NEW] 分組邏輯：將照片依據 batchId 分組
   groupedPhotos = computed(() => {
       const allPhotos = this.photos();
       const groups = new Map<number, PhotoGroup>();
       
+      // 未分類的批次 ID (給舊照片用)
       const UNKNOWN_BATCH = 0;
 
       allPhotos.forEach(photo => {
@@ -879,6 +883,7 @@ export class GalleryComponent {
           groups.get(batchId)?.items.push(photo);
       });
 
+      // 將 Map 轉為陣列，並依照批次時間倒序排列 (新的在上面)
       return Array.from(groups.values()).sort((a, b) => b.batchId - a.batchId);
   });
 
@@ -961,8 +966,10 @@ export class GalleryComponent {
     }
   }
 
+  // 🔥 [NEW] 批次全選功能
   selectBatch(group: PhotoGroup) {
       const batchIds = group.items.map(p => p.id);
+      // 將這一批的 ID 加入目前的選取清單 (Set 邏輯，避免重複)
       const current = new Set(this.selectedIds());
       batchIds.forEach(id => current.add(id));
       this.selectedIds.set(Array.from(current));
@@ -985,8 +992,12 @@ export class GalleryComponent {
   showToast(msg: string) {
       this.zone.run(() => {
           this.toastMessage.set(msg);
-          setTimeout(() => this.toastMessage.set(null), 3000);
       });
+      setTimeout(() => {
+          this.zone.run(() => {
+              this.toastMessage.set(null);
+          });
+      }, 3000);
   }
 
   onPointerDown(event: PointerEvent, photoId: string) {
@@ -1109,6 +1120,7 @@ export class GalleryComponent {
       this.createPlaylistState.update(s => ({ ...s, name: input.value }));
   }
 
+  // 🔥 [修正] 用 zone.run 包裹強迫變更偵測回歸，解決建立清單後頁面不重新整理的 Bug
   confirmCreatePlaylist() {
       this.zone.run(() => {
           const name = this.createPlaylistState().name.trim();
@@ -1116,8 +1128,8 @@ export class GalleryComponent {
               const newId = this.photoService.createPlaylist(name);
               if (this.selectedIds().length > 0) {
                   this.photoService.addToPlaylist(newId, this.selectedIds());
+                  this.clearSelection();
               }
-              this.clearSelection();
           }
           this.cancelCreatePlaylist();
       });
@@ -1179,6 +1191,7 @@ export class GalleryComponent {
     this.photoService.restoreAllFromTrash();
   }
 
+  // 🔥 [修正] 切換播放清單分頁時強迫 Zone 刷新
   enterPlaylist(id: string) {
       this.zone.run(() => {
           this.photoService.activePlaylistId.set(id);
@@ -1193,6 +1206,7 @@ export class GalleryComponent {
       });
   }
 
+  // 🔥 [修正] 用 zone.run 確保點開設定時，預設填入的屬性資料被同步渲染至彈窗
   openPlaylistSettings() {
       this.zone.run(() => {
           const pl = this.activePlaylist();
@@ -1305,14 +1319,15 @@ export class GalleryComponent {
               const photo = this.getPhotoById(photoId);
               if (!photo) continue;
 
+              // 🔥 [核心對齊] 將編輯器存好的新合約比率（ratioX / ratioY）封裝進入多圖發送 Payload
               const specificConfig = {
                   motionStrength: photo.motionSettings ? photo.motionSettings.strength : this.settings.settings().globalMotionStrength,
                   motionEnabled: photo.motionSettings ? photo.motionSettings.enabled : true,
                   scale: photo.viewSettings ? photo.viewSettings.scale : 1.1,
                   panX: photo.viewSettings ? photo.viewSettings.panX : 0,
                   panY: photo.viewSettings ? photo.viewSettings.panY : 0,
-                  ratioX: photo.viewSettings && photo.viewSettings.ratioX !== undefined ? photo.viewSettings.ratioX : 0, 
-                  ratioY: photo.viewSettings && photo.viewSettings.ratioY !== undefined ? photo.viewSettings.ratioY : 0  
+                  ratioX: photo.viewSettings && photo.viewSettings.ratioX !== undefined ? photo.viewSettings.ratioX : 0,
+                  ratioY: photo.viewSettings && photo.viewSettings.ratioY !== undefined ? photo.viewSettings.ratioY : 0
               };
               playlistConfigs.push(specificConfig);
 
@@ -1393,8 +1408,8 @@ export class GalleryComponent {
           }
           
           if (type === 'lock' || type === 'both') {
-              updatePayload.lock_playlist = [ ...playlistPaths ];
-              updatePayload.lock_playlistConfigs = [ ...playlistConfigs ];
+              updatePayload.lock_playlist = playlistPaths;
+              updatePayload.lock_playlistConfigs = playlistConfigs;
               updatePayload.lock_interval = newInterval; 
           }
 
@@ -1416,5 +1431,68 @@ export class GalleryComponent {
           console.error(e);
           this.showToast('設定失敗: ' + (e as any).message);
       }
+  }
+
+  formatSortOrder(order: SortOrder | undefined): string {
+      switch(order) {
+          case 'random': return '隨機';
+          case 'name_asc': return '名稱 (A-Z)';
+          case 'name_desc': return '名稱 (Z-A)';
+          case 'date_asc': return '日期 (舊到新)';
+          case 'date_desc': return '日期 (新到舊)';
+          case 'custom': return '自訂';
+          default: return '自訂';
+      }
+  }
+
+  formatBytes(bytes?: number) {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  downloadBackup() {
+      const data = this.photoService.generateBackup();
+      if ((window as any).Android && (window as any).Android.backupSettings) {
+          (window as any).Android.backupSettings(data);
+      } else {
+          const blob = new Blob([data], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `parallax-backup-${new Date().toISOString().slice(0, 10)}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+      }
+  }
+
+  triggerRestore() {
+      if ((window as any).Android && (window as any).Android.restoreSettings) {
+          (window as any).Android.restoreSettings();
+      } else {
+          this.restoreInput()?.nativeElement.click();
+      }
+  }
+
+  onRestoreFileSelected(event: Event) {
+      const input = event.target as HTMLInputElement;
+      if (input.files && input.files[0]) {
+          const file = input.files[0];
+          const reader = new FileReader();
+          
+          reader.onload = (e) => {
+              const content = e.target?.result as string;
+              if (content) {
+                  const result = this.photoService.restoreBackup(content);
+                  this.showToast(result.message);
+              }
+          };
+          
+          reader.readAsText(file);
+      }
+      input.value = ''; 
   }
 }
