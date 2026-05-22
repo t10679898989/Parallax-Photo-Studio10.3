@@ -50,7 +50,6 @@ public class ParallaxWallpaperService extends WallpaperService {
         float scale = 1.0f;
         float panX = 0f;
         float panY = 0f;
-        // 🔥 [新合約] 儲存網頁端精確計算出的相對比例百分比
         float ratioX = 0f;
         float ratioY = 0f;
         boolean hasRatio = false; 
@@ -74,11 +73,9 @@ public class ParallaxWallpaperService extends WallpaperService {
         private Bitmap currentBitmap;
         private float userScale = 1.0f;
         
-        // 舊合約絕對像素欄位 (留作向下相容備援)
         private float manualPanX = 0;
         private float manualPanY = 0;
         
-        // 🔥 [新合約] 當前照片使用的相對比例與判斷標記
         private float manualPanRatioX = 0;
         private float manualPanRatioY = 0;
         private boolean currentHasRatio = false;
@@ -307,7 +304,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                 String mode = json.optString("mode", "single");
                 isPlaylistMode = "playlist".equals(mode);
 
-                // 先解析播放清單內容
                 homePlaylistPaths.clear();
                 homePlaylistConfigs.clear();
                 parsePlaylist(json, "playlist", "playlistConfigs", homePlaylistPaths, homePlaylistConfigs);
@@ -334,29 +330,20 @@ public class ParallaxWallpaperService extends WallpaperService {
                         loadImage(singleImagePath);
                     }
                     
-                    // 🔥 [單圖模式防呆] 從前端傳遞的單圖結構中萃取新舊合約參數
-                    resolvePlaylistSource();
-                    int index = isLocked ? lockPlaylistIndex : homePlaylistIndex;
-                    if (currentPlaylistConfigs != null && !currentPlaylistConfigs.isEmpty()) {
-                        if (index >= currentPlaylistConfigs.size()) index = 0;
-                        PhotoConfig config = currentPlaylistConfigs.get(index);
-                        currentMotionStrength = config.motionStrength;
-                        currentMotionEnabled = config.motionEnabled;
-                        userScale = config.scale;
-                        manualPanX = config.panX;
-                        manualPanY = config.panY;
-                        manualPanRatioX = config.ratioX;
-                        manualPanRatioY = config.ratioY;
-                        currentHasRatio = config.hasRatio;
+                    if (json.has("scale")) userScale = (float) json.getDouble("scale");
+                    if (json.has("motionStrength")) globalMotionStrength = (float) json.getDouble("motionStrength");
+                    if (json.has("motionEnabled")) globalMotionEnabled = json.optBoolean("motionEnabled", true);
+
+                    currentMotionStrength = globalMotionStrength;
+                    currentMotionEnabled = globalMotionEnabled;
+
+                    if (json.has("ratioX") || json.has("ratioY")) {
+                        manualPanRatioX = (float) json.optDouble("ratioX", 0);
+                        manualPanRatioY = (float) json.optDouble("ratioY", 0);
+                        currentHasRatio = true;
                     } else {
-                        // 根節點舊資料降級相容機制
-                        userScale = json.has("scale") ? (float) json.getDouble("scale") : 1.0f;
-                        currentMotionStrength = json.has("motionStrength") ? (float) json.getDouble("motionStrength") : 1.0f;
-                        currentMotionEnabled = json.optBoolean("motionEnabled", true);
                         manualPanX = json.has("panX") ? (float) json.getDouble("panX") : 0f;
                         manualPanY = json.has("panY") ? (float) json.getDouble("panY") : 0f;
-                        manualPanRatioX = 0f;
-                        manualPanRatioY = 0f;
                         currentHasRatio = false;
                     }
                 }
@@ -396,7 +383,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                                 config.panX = (float) c.optDouble("panX", 0);
                                 config.panY = (float) c.optDouble("panY", 0);
                                 
-                                // 🔥 [新合約解析] 讀取 ratioX 與 ratioY
                                 if (c.has("ratioX") || c.has("ratioY")) {
                                     config.ratioX = (float) c.optDouble("ratioX", 0);
                                     config.ratioY = (float) c.optDouble("ratioY", 0);
@@ -433,13 +419,13 @@ public class ParallaxWallpaperService extends WallpaperService {
                 manualPanX = config.panX;
                 manualPanY = config.panY;
                 
-                // 🔥 輪播換圖時，將該圖設定的相對比例與標記同步到引擎變數中
                 manualPanRatioX = config.ratioX;
                 manualPanRatioY = config.ratioY;
                 currentHasRatio = config.hasRatio;
             } else {
-                currentMotionStrength = json.has("motionStrength") ? (float) json.getDouble("motionStrength") : 1.0f;
-                currentMotionEnabled = json.optBoolean("motionEnabled", true);
+                // 🔥 [修正處] 降級回歸讀取類別內的全域成員變數，徹底根除找不到 json 變數的錯誤
+                currentMotionStrength = globalMotionStrength;
+                currentMotionEnabled = globalMotionEnabled;
                 manualPanX = 0;
                 manualPanY = 0;
                 manualPanRatioX = 0;
@@ -612,16 +598,13 @@ public class ParallaxWallpaperService extends WallpaperService {
                     float maxDx = (scaledImageWidth - screenWidth) / 2f;
                     float maxDy = (scaledImageHeight - screenHeight) / 2f;
 
-                    // 🔥 [新合約核心處理] 
                     float targetPanX = 0f;
                     float targetPanY = 0f;
 
                     if (currentHasRatio) {
-                        // 如果具備新合約比例，直接用百分比乘以當前裝置的最大移動上限，達到完美的跨裝置 WYSIWYG
                         targetPanX = manualPanRatioX * maxDx;
                         targetPanY = manualPanRatioY * maxDy;
                     } else {
-                        // 否則降級相容舊有實體像素設定，並進行夾擠限制
                         targetPanX = Math.max(-maxDx, Math.min(manualPanX, maxDx));
                         targetPanY = Math.max(-maxDy, Math.min(manualPanY, maxDy));
                     }
@@ -634,7 +617,6 @@ public class ParallaxWallpaperService extends WallpaperService {
                         currentGyroY = 0;
                     }
 
-                    // 合併拖曳定位與陀螺儀即時震盪偏移量
                     float totalOffsetX = targetPanX + (currentGyroX * 30f * currentMotionStrength);
                     float totalOffsetY = targetPanY + (currentGyroY * 30f * currentMotionStrength);
 
