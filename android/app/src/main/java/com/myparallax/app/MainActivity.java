@@ -7,7 +7,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.hardware.display.DisplayManager;
 import android.view.Display;
 import android.net.Uri;
@@ -82,7 +81,7 @@ public class MainActivity extends BridgeActivity {
         );
     }
 
-    // 🔥 [NEW] 當 App 喚醒或首次載入完成時，主動將螢幕最高硬體 FPS 透過 JS 注入給網頁端窗口
+    // 當 App 喚醒或首次載入完成時，主動將螢幕最高硬體 FPS 透過 JS 注入給網頁端窗口
     @Override
     protected void onResume() {
         super.onResume();
@@ -95,7 +94,7 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    // 🔥 [NEW] 核心硬體偵測邏輯：遍歷裝置支援的所有 Mode，找出絕對的物理硬體重新整理率極限 (防止省電模式干擾)
+    // 核心硬體偵測邏輯：遍歷裝置支援的所有 Mode，找出絕對的物理硬體重新整理率極限 (防止省電模式干擾)
     private int getMaxSupportedRefreshRate() {
         float maxRefreshRate = 60f;
         try {
@@ -209,13 +208,13 @@ public class MainActivity extends BridgeActivity {
             mContext = c;
         }
 
-        // 🔥 [NEW] 允許網頁端主動拉取最高 FPS 的雙向保障窗口 (Pull 模式備援)
+        // 🔥 [核心修正] 加上明確的 MainActivity.this 限定符，徹底消除內部 Lambda 的變數解析錯誤
         @JavascriptInterface
         public void requestDeviceMaxFps() {
-            runOnUiThread(() -> {
-                WebView webView = getBridge().getWebView();
+            MainActivity.this.runOnUiThread(() -> {
+                WebView webView = MainActivity.this.getBridge().getWebView();
                 if (webView != null) {
-                    int maxFps = getMaxSupportedRefreshRate();
+                    int maxFps = MainActivity.this.getMaxSupportedRefreshRate();
                     webView.evaluateJavascript("if(window.setDeviceMaxFps) window.setDeviceMaxFps(" + maxFps + ");", null);
                 }
             });
@@ -241,7 +240,7 @@ public class MainActivity extends BridgeActivity {
                  intent.setPackage(mContext.getPackageName());
                  mContext.sendBroadcast(intent);
 
-                 runOnUiThread(() -> {
+                 MainActivity.this.runOnUiThread(() -> {
                      try {
                          WallpaperManager wm = WallpaperManager.getInstance(mContext);
                          if (wm.getWallpaperInfo() == null || 
