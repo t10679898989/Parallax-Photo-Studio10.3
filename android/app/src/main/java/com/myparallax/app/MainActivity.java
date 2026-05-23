@@ -7,8 +7,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.hardware.display.DisplayManager;
-import android.view.Display;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -81,43 +80,46 @@ public class MainActivity extends BridgeActivity {
         );
     }
 
-    // 當 App 喚醒或首次載入完成時，主動將螢幕最高硬體 FPS 透過 JS 注入給網頁端窗口
+    // 🔥 核心優化：修正為 public void，防止因繼承權限縮小（Weaker Access Privileges）導致的編譯失敗
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
             webView.postDelayed(() -> {
                 int maxFps = getMaxSupportedRefreshRate();
                 webView.evaluateJavascript("if(window.setDeviceMaxFps) window.setDeviceMaxFps(" + maxFps + ");", null);
-            }, 800); // 給予 800ms 的安全緩衝時間，確保 Angular 初始化及 window 方法掛載完畢
+            }, 800);
         }
     }
 
-    // 核心硬體偵測邏輯：遍歷裝置支援的所有 Mode，找出絕對的物理硬體重新整理率極限 (防止省電模式干擾)
+    // 🔥 核心優化：使用「Java 全限定類別名稱」重構，100% 杜絕任何 Android SDK 編譯器版本對 Display/Mode 的符號解析錯誤
     private int getMaxSupportedRefreshRate() {
         float maxRefreshRate = 60f;
         try {
-            Display display = null;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-                if (dm != null) {
-                    display = dm.getDisplay(Display.DEFAULT_DISPLAY);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                android.view.Display display = null;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    android.hardware.display.DisplayManager dm = (android.hardware.display.DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+                    if (dm != null) {
+                        display = dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+                    }
                 }
-            }
-            if (display == null) {
-                display = getWindowManager().getDefaultDisplay();
-            }
+                if (display == null) {
+                    display = getWindowManager().getDefaultDisplay();
+                }
 
-            if (display != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    Display.Mode[] modes = display.getSupportedModes();
-                    for (Display.Mode mode : modes) {
+                if (display != null) {
+                    android.view.Display.Mode[] modes = display.getSupportedModes();
+                    for (android.view.Display.Mode mode : modes) {
                         if (mode.getRefreshRate() > maxRefreshRate) {
                             maxRefreshRate = mode.getRefreshRate();
                         }
                     }
-                } else {
+                }
+            } else {
+                android.view.Display display = getWindowManager().getDefaultDisplay();
+                if (display != null) {
                     maxRefreshRate = display.getRefreshRate();
                 }
             }
@@ -140,7 +142,6 @@ public class MainActivity extends BridgeActivity {
                     perms.add(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED);
                 }
             }
-            // 請求通知權限 (為了 Keep Alive)
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 perms.add(Manifest.permission.POST_NOTIFICATIONS);
             }
@@ -208,7 +209,6 @@ public class MainActivity extends BridgeActivity {
             mContext = c;
         }
 
-        // 🔥 [核心修正] 加上明確的 MainActivity.this 限定符，徹底消除內部 Lambda 的變數解析錯誤
         @JavascriptInterface
         public void requestDeviceMaxFps() {
             MainActivity.this.runOnUiThread(() -> {
@@ -224,7 +224,6 @@ public class MainActivity extends BridgeActivity {
         public void updateSettings(String jsonSettings) {
             SharedPreferences sharedPref = mContext.getSharedPreferences("WallpaperPrefs", Context.MODE_PRIVATE);
             sharedPref.edit().putString("settings_json", jsonSettings).commit();
-            // 通知 Service 更新 (單向)
             Intent intent = new Intent("com.myparallax.app.ACTION_UPDATE_WALLPAPER");
             intent.setPackage(mContext.getPackageName());
             mContext.sendBroadcast(intent);
