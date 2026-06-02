@@ -15,6 +15,13 @@ type FitMode = 'height' | 'width';
       (click)="onBackgroundClick($event)"
     >
       
+      <div class="absolute inset-0 pointer-events-none z-30 opacity-60 mix-blend-screen">
+          <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_2px_8px_rgba(255,255,255,0.8)]"></div>
+          <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent shadow-[0_-2px_8px_rgba(255,255,255,0.8)]"></div>
+          <div class="absolute top-0 bottom-0 left-0 w-[2px] bg-gradient-to-b from-transparent via-white/40 to-transparent shadow-[2px_0_6px_rgba(255,255,255,0.6)]"></div>
+          <div class="absolute top-0 bottom-0 right-0 w-[2px] bg-gradient-to-b from-transparent via-white/40 to-transparent shadow-[-2px_0_6px_rgba(255,255,255,0.6)]"></div>
+      </div>
+
       <div 
         class="absolute top-0 left-0 right-0 z-50 p-4 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent pointer-events-none transition-opacity duration-300"
         [class.opacity-0]="!uiVisible()"
@@ -503,6 +510,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
             ratioY: rY    
         };
 
+        // 🔥 這裡的欄位完全保留，同步把 ratioX/Y 寫入根節點，給單圖模式無縫接收
         const updatePayload: any = {
             mode: 'single', 
             motionStrength: effectiveStrength,
@@ -545,6 +553,8 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     }, 3000);
   }
   
+  // --- POINTER EVENTS (Drag & Pinch) ---
+
   onPointerDown(event: PointerEvent) {
     if (this.isSettingsOpen()) return;
     
