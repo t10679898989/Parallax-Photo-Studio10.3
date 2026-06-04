@@ -13,6 +13,8 @@ export interface AppSettings {
   thumbnailShape: ThumbnailShape;
   thumbnailGap: number;
   batteryOptimization: boolean;
+  guideWidth: number;                          // 🔥 [新欄位] 邊界安全導航條寬度 (px)
+  guideColor: string;                          // 🔥 [新欄位] 邊界安全導航條顏色 (Hex 色碼)
 }
 
 @Injectable({
@@ -25,7 +27,7 @@ export class SettingsService {
   // 儲存從 Android 原生端主動餵過來的物理螢幕最高重新整理率
   deviceMaxFps = signal<number>(60);
 
-  // 🔥 [核心補回] 追蹤系統目前是否處於省電狀態的 Signal 屬性
+  // 追蹤系統目前是否處於省電狀態的 Signal 屬性
   systemPowerSaveActive = signal<boolean>(false);
 
   // 核心設定狀態 Signal 中心
@@ -38,7 +40,9 @@ export class SettingsService {
     globalMotionStrength: 1.0,
     thumbnailShape: 'squircle',
     thumbnailGap: 8,
-    batteryOptimization: false
+    batteryOptimization: false,
+    guideWidth: 2,                             // 🔥 預設寬度 2px
+    guideColor: '#ffffff'                      // 🔥 預設純白高質感微光
   });
 
   constructor() {
@@ -61,6 +65,11 @@ export class SettingsService {
       try {
         const parsed = JSON.parse(saved);
         if (!parsed.fpsMode) parsed.fpsMode = 'balanced';
+        
+        // 🔥 向下相容防呆：若舊存檔沒有導航條欄位，自動補上安全預設值
+        if (parsed.guideWidth === undefined) parsed.guideWidth = 2;
+        if (parsed.guideColor === undefined) parsed.guideColor = '#ffffff';
+        
         this.settings.set(parsed);
       } catch (e) {
         console.error('Failed to parse settings', e);
@@ -122,14 +131,13 @@ export class SettingsService {
     });
   }
 
-  // 🔥 [核心補回] 供 app.component.ts 第 24 行調用的關鍵接收方法，徹底解決 TS2339 錯誤
+  // 供 app.component.ts 第 24 行調用的關鍵接收方法
   setSystemPowerSave(isActive: boolean) {
     this.systemPowerSaveActive.set(isActive);
   }
 
   // 動態判定當前視差預覽是否該停止運作
   isEffectivelyPaused(): boolean {
-    // 當使用者開啟「省電時暫停」且 Android 系統目前確實傳來省電訊號時，判定為暫停
     return this.settings().pauseOnPowerSave && this.systemPowerSaveActive();
   }
 }

@@ -1,4 +1,4 @@
-import { Component, inject, input, output, signal, computed, effect, viewChild, ElementRef, NgZone } from '@angular/core';
+import { Component, inject, input, output, signal, computed, viewChild, ElementRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Photo, Playlist, PhotoService, SortOrder } from '../../services/photo.service';
@@ -118,7 +118,6 @@ interface PhotoGroup {
                     </div>
                   </div>
 
-                  <!-- 雙行顯示 FPS 面板與三段式檔位組合按鈕 -->
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                       <h3 class="font-medium text-white flex items-center gap-2 mb-4">
                           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
@@ -174,8 +173,40 @@ interface PhotoGroup {
                   </div>
 
                   <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                      <h3 class="font-medium text-white mb-4 flex items-center gap-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="3"/></svg>
+                         編輯器安全邊界條 (Edge Guides)
+                      </h3>
+
+                      <div class="space-y-6">
+                        <div>
+                            <div class="flex justify-between text-sm text-slate-300 mb-2">
+                                <span>微光邊界線寬</span>
+                                <span class="font-mono text-emerald-400">{{ settings.settings().guideWidth }}px</span>
+                            </div>
+                            <input type="range" min="1" max="10" step="1" [ngModel]="settings.settings().guideWidth" (ngModelChange)="updateSetting('guideWidth', +$event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-sm text-slate-300 mb-2">
+                                <span>微光條渲染顏色</span>
+                                <span class="font-mono text-emerald-400 uppercase">{{ settings.settings().guideColor }}</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <input type="color" [ngModel]="settings.settings().guideColor" (ngModelChange)="updateSetting('guideColor', $event)" class="w-10 h-10 rounded border-0 bg-transparent cursor-pointer shrink-0">
+                                <div class="flex gap-2 flex-1 overflow-x-auto py-1 no-scrollbar">
+                                    @for (color of ['#ffffff', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']; track color) {
+                                        <button (click)="updateSetting('guideColor', color)" class="w-6 h-6 rounded-full border border-white/20 shrink-0 transition-transform active:scale-90" [style.backgroundColor]="color" [class.ring-2]="settings.settings().guideColor === color" [class.ring-emerald-400]="settings.settings().guideColor === color"></button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                      </div>
+                  </div>
+
+                  <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
                       <h3 class="font-medium text-white flex items-center gap-2 mb-4">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
                           全域動態預設值 (Global Motion)
                       </h3>
 
@@ -389,6 +420,7 @@ interface PhotoGroup {
 
                     <input #fileInput type="file" multiple accept="image/*" class="hidden" (change)="onFileSelected($event)">
                     <input #folderInput type="file" webkitdirectory directory multiple class="hidden" (change)="onFileSelected($event)">
+                    <input #restoreInput type="file" accept=".json" class="hidden" (change)="onRestoreFileSelected($event)">
 
                     <div class="flex rounded-lg bg-slate-800 p-1 ml-auto">
                     <button (click)="fileInput.click()" class="px-3 py-1.5 text-sm font-medium hover:text-white text-slate-300 transition-colors">+ 檔案</button>
@@ -839,7 +871,7 @@ interface PhotoGroup {
     .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     .animate-spin { animation: spin 1s linear infinite; }
     @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-    @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+    @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; transform: translate(-50%, 0); opacity: 1; } }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .custom-scroll::-webkit-scrollbar { width: 10px; }
     .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
@@ -847,8 +879,7 @@ interface PhotoGroup {
     .custom-scroll::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
   `]
 })
-export class GalleryComponent {
-  photos = input.required<Photo[]>();
+export class GalleryComponent {photos = input.required<Photo[]>();
   
   photoService = inject(PhotoService);
   playlists = this.photoService.playlists;
@@ -866,10 +897,10 @@ export class GalleryComponent {
   showActionMenu = signal(false);
   showDeleteConfirm = signal(false);
   showEmptyTrashConfirm = signal(false);
+  showDoubleTapConfirm = signal(false);
+  deletePlaylistConfirmVisible = signal(false);
   
   createPlaylistState = signal<CreatePlaylistState>({ visible: false, name: '' });
-  
-  deletePlaylistConfirmVisible = signal(false);
   pendingDeletePlaylistId = signal<string | null>(null);
 
   playlistSettingsState = signal<PlaylistSettingsState>({ visible: false, playlistId: null });
@@ -884,12 +915,9 @@ export class GalleryComponent {
   isSelecting = signal(false);
   
   detailsState = signal<DetailsState>({ visible: false, photo: null });
-
-  showDoubleTapConfirm = signal(false);
   pendingWallpaperType = signal<'home' | 'lock' | 'both' | null>(null);
 
   importProgress = this.photoService.importProgress;
-
   trashCount = computed(() => this.photoService.trash().length);
 
   activePlaylist = computed(() => {
@@ -976,21 +1004,6 @@ export class GalleryComponent {
     };
   });
 
-  constructor() {
-      (window as any).onRestoreFileLoaded = (jsonContent: string) => {
-          this.zone.run(() => {
-              const result = this.photoService.restoreBackup(jsonContent);
-              this.showToast(result.message);
-          });
-      };
-
-      setTimeout(() => {
-          if ((window as any).Android && (window as any).Android.requestDeviceMaxFps) {
-              (window as any).Android.requestDeviceMaxFps();
-          }
-      }, 400);
-  }
-
   setFpsMode(mode: FpsMode) {
       this.settings.updateFpsMode(mode);
   }
@@ -1002,7 +1015,7 @@ export class GalleryComponent {
       return 60;
   }
 
-  // 🔥 [NEW] 重新定義已被漏掉的 Base64 轉換方法，完美修正 TS-998113
+  // 完美宣告 blobToBase64 轉換方法
   private blobToBase64(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1156,7 +1169,7 @@ export class GalleryComponent {
   toggleSettings() { this.showSettings.update(v => !v); }
   
   updateSetting(k: string, v: any) { 
-      if (['targetFps', 'thumbnailGap', 'globalMotionStrength'].includes(k)) {
+      if (['targetFps', 'thumbnailGap', 'globalMotionStrength', 'guideWidth'].includes(k)) {
           v = Number(v);
       }
       this.settings.updateSettings({[k]: v}); 
@@ -1348,69 +1361,6 @@ export class GalleryComponent {
       }
       this.showDoubleTapConfirm.set(false);
       this.pendingWallpaperType.set(null);
-  }
-
-  formatSortOrder(order: SortOrder | undefined): string {
-      switch(order) {
-          case 'random': return '隨機';
-          case 'name_asc': return '名稱 (A-Z)';
-          case 'name_desc': return '名稱 (Z-A)';
-          case 'date_asc': return '日期 (舊到新)';
-          case 'date_desc': return '日期 (新到舊)';
-          case 'custom': return '自訂';
-          default: return '自訂';
-      }
-  }
-
-  formatBytes(bytes?: number) {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  }
-
-  downloadBackup() {
-      const data = this.photoService.generateBackup();
-      if ((window as any).Android && (window as any).Android.backupSettings) {
-          (window as any).Android.backupSettings(data);
-      } else {
-          const blob = new Blob([data], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `parallax-backup-${new Date().toISOString().slice(0, 10)}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-      }
-  }
-
-  triggerRestore() {
-      if ((window as any).Android && (window as any).Android.restoreSettings) {
-          (window as any).Android.restoreSettings();
-      } else {
-          this.restoreInput()?.nativeElement.click();
-      }
-  }
-
-  onRestoreFileSelected(event: Event) {
-      const input = event.target as HTMLInputElement;
-      if (input.files && input.files[0]) {
-          const file = input.files[0];
-          const reader = new FileReader();
-          
-          reader.onload = (e) => {
-              const content = e.target?.result as string;
-              if (content) {
-                  const result = this.photoService.restoreBackup(content);
-                  this.showToast(result.message);
-              }
-          };
-          
-          reader.readAsText(file);
-      }
-      input.value = ''; 
   }
 
   async applyPlaylistWallpaper(type: 'home' | 'lock' | 'both') {
