@@ -13,8 +13,8 @@ export interface AppSettings {
   thumbnailShape: ThumbnailShape;
   thumbnailGap: number;
   batteryOptimization: boolean;
-  guideWidth: number;                          // 🔥 [新欄位] 邊界安全導航條寬度 (px)
-  guideColor: string;                          // 🔥 [新欄位] 邊界安全導航條顏色 (Hex 色碼)
+  guideWidth: number;                          // 🔥 [核心對齊] 編輯器安全邊界導航條線寬 (單位: px)
+  guideColor: string;                          // 🔥 [核心對齊] 編輯器安全邊界導航條顏色 (Hex 色碼)
 }
 
 @Injectable({
@@ -41,8 +41,8 @@ export class SettingsService {
     thumbnailShape: 'squircle',
     thumbnailGap: 8,
     batteryOptimization: false,
-    guideWidth: 2,                             // 🔥 預設寬度 2px
-    guideColor: '#ffffff'                      // 🔥 預設純白高質感微光
+    guideWidth: 2,                             // 🔥 預設安全導航條線寬為 2px
+    guideColor: '#ffffff'                      // 🔥 預設安全導航條顏色為純白
   });
 
   constructor() {
@@ -66,7 +66,7 @@ export class SettingsService {
         const parsed = JSON.parse(saved);
         if (!parsed.fpsMode) parsed.fpsMode = 'balanced';
         
-        // 🔥 向下相容防呆：若舊存檔沒有導航條欄位，自動補上安全預設值
+        // 🔥 向下相容防呆：若使用者的手機本地舊存檔沒有導航條欄位，自動補上安全預設值
         if (parsed.guideWidth === undefined) parsed.guideWidth = 2;
         if (parsed.guideColor === undefined) parsed.guideColor = '#ffffff';
         
@@ -131,7 +131,7 @@ export class SettingsService {
     });
   }
 
-  // 供 app.component.ts 第 24 行調用的關鍵接收方法
+  // 供 app.component.ts 第 24 行調用的關鍵接收方法，確保全域省電監聽不中斷
   setSystemPowerSave(isActive: boolean) {
     this.systemPowerSaveActive.set(isActive);
   }

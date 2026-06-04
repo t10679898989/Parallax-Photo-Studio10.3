@@ -111,22 +111,18 @@ type FitMode = 'height' | 'width';
       >
         <div class="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-700 rounded-full"></div>
         
-        <div class="grid grid-cols-1 gap-6 max-w-md mx-auto w-full pb-6">
+        <div class="grid grid-cols-1 gap-5 max-w-md mx-auto w-full pb-6 overflow-y-auto max-h-[70vh] no-scrollbar">
            <div class="flex items-center justify-between">
               <h3 class="text-lg font-bold text-white">Editor Settings</h3>
-              </div>
+           </div>
 
-           <div class="space-y-3">
+           <div class="space-y-2">
              <div class="flex justify-between items-center">
                <label class="text-sm font-medium text-slate-300">
                   Motion Strength
                   @if (!motionEnabled()) { <span class="text-slate-500 ml-2 text-xs">(Disabled)</span> }
                </label>
-               <span 
-                 class="text-xs font-mono transition-colors"
-                 [class.text-emerald-400]="isMotionVisuallyActive()"
-                 [class.text-slate-500]="!isMotionVisuallyActive()"
-               >{{ motionStrength() }}x</span>
+               <span class="text-xs font-mono transition-colors" [class.text-emerald-400]="isMotionVisuallyActive()">{{ motionStrength() }}x</span>
              </div>
              <div class="flex items-center gap-4">
                <button 
@@ -137,65 +133,74 @@ type FitMode = 'height' | 'width';
                   [class.text-white]="isMotionVisuallyActive()"
                   [class.bg-slate-800]="!isMotionVisuallyActive()"
                   [class.border-slate-700]="!isMotionVisuallyActive()"
-                  [class.text-slate-400]="!isMotionVisuallyActive()"
-                  title="Toggle Motion"
                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10 10 10 0 0 0-10-10z"/><path d="M12 12v6"/><path d="m16.5 16-9-8"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/></svg>
                </button>
                <input 
                  type="range" min="0" max="5" step="0.1"
                  [value]="motionStrength()"
                  (input)="updateStrength($event)"
-                 class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer transition-all"
-                 [class.accent-emerald-500]="isMotionVisuallyActive()"
-                 [class.accent-slate-500]="!isMotionVisuallyActive()"
-                 [class.opacity-50]="!isMotionVisuallyActive()"
+                 class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer transition-all accent-emerald-500"
                >
              </div>
            </div>
 
-           <div class="space-y-3">
+           <div class="space-y-2">
              <div class="flex justify-between items-center">
                 <label class="text-sm font-medium text-slate-300">Image Fit</label>
                 <span class="text-xs text-emerald-400 font-mono">Zoom: {{ ((imageScale() - 1) * 100).toFixed(0) }}%</span>
              </div>
              
              <div class="grid grid-cols-2 gap-2 bg-slate-800 p-1 rounded-lg">
-               <button 
-                 class="px-3 py-2 rounded-md text-sm font-medium transition-all"
-                 [class.bg-slate-600]="fitMode() === 'height'"
-                 [class.text-white]="fitMode() === 'height'"
-                 [class.text-slate-400]="fitMode() !== 'height'"
-                 (click)="setFitMode('height')"
-               >
-                 Vertical
-               </button>
-               <button 
-                 class="px-3 py-2 rounded-md text-sm font-medium transition-all"
-                 [class.bg-slate-600]="fitMode() === 'width'"
-                 [class.text-white]="fitMode() === 'width'"
-                 [class.text-slate-400]="fitMode() !== 'width'"
-                 (click)="setFitMode('width')"
-               >
-                 Horizontal
-               </button>
+               <button class="px-3 py-1.5 rounded-md text-sm font-medium transition-all" [class.bg-slate-600]="fitMode() === 'height'" [class.text-white]="fitMode() === 'height'" (click)="setFitMode('height')">Vertical</button>
+               <button class="px-3 py-1.5 rounded-md text-sm font-medium transition-all" [class.bg-slate-600]="fitMode() === 'width'" [class.text-white]="fitMode() === 'width'" (click)="setFitMode('width')">Horizontal</button>
              </div>
 
              <div class="flex items-center gap-3 pt-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                <input 
-                   type="range" min="1.0" max="3.0" step="0.05"
-                   [value]="imageScale()"
-                   (input)="updateScale($event)"
-                   class="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-300"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                <input type="range" min="1.0" max="3.0" step="0.05" [value]="imageScale()" (input)="updateScale($event)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500">
              </div>
            </div>
 
-           <div class="flex gap-4 pt-2 border-t border-white/10 mt-2">
+           <div class="space-y-3 pt-3 border-t border-slate-800">
+              <div class="flex justify-between items-center">
+                  <label class="text-sm font-medium text-slate-300">Guide Line Width (安全線寬)</label>
+                  <span class="text-xs text-emerald-400 font-mono font-bold">{{ settingsService.settings().guideWidth }}px</span>
+              </div>
+              <input 
+                  type="range" min="1" max="10" step="1" 
+                  [value]="settingsService.settings().guideWidth" 
+                  (input)="settingsService.updateSettings({guideWidth: +$any($event.target).value})" 
+                  class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              >
+              
+              <div class="flex justify-between items-center pt-1">
+                  <label class="text-sm font-medium text-slate-300">Guide Color (安全邊界顏色)</label>
+                  <span class="text-xs text-slate-400 font-mono uppercase">{{ settingsService.settings().guideColor }}</span>
+              </div>
+              <div class="flex items-center gap-3">
+                  <input 
+                      type="color" 
+                      [value]="settingsService.settings().guideColor" 
+                      (input)="settingsService.updateSettings({guideColor: $any($event.target).value})" 
+                      class="w-8 h-8 rounded border-0 bg-transparent cursor-pointer shrink-0"
+                  >
+                  <div class="flex gap-2 flex-1 overflow-x-auto py-1 no-scrollbar">
+                      @for (color of ['#ffffff', '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']; track color) {
+                          <button 
+                              (click)="settingsService.updateSettings({guideColor: color})" 
+                              class="w-6 h-6 rounded-full border border-white/10 shrink-0 transition-all active:scale-90" 
+                              [style.backgroundColor]="color" 
+                              [class.ring-2]="settingsService.settings().guideColor === color" 
+                              [class.ring-emerald-400]="settingsService.settings().guideColor === color"
+                          ></button>
+                      }
+                  </div>
+              </div>
+           </div>
+
+           <div class="flex gap-4 pt-3 border-t border-slate-800 mt-2">
              <button (click)="resetSettings()" class="flex-1 py-3 text-slate-400 font-medium hover:text-white transition-colors">Reset</button>
-             <button (click)="saveSettings()" class="flex-[2] bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors py-3 shadow-lg active:scale-95">Save</button>
+             <button (click)="saveSettings()" class="flex-[2] bg-white text-black font-bold rounded-xl py-3 shadow-lg active:scale-95 transition-all">Save</button>
            </div>
         </div>
       </div>
@@ -203,32 +208,18 @@ type FitMode = 'height' | 'width';
       @if (showWallpaperMenu()) {
         <div class="absolute inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in" (click)="closeWallpaperMenu()">
             <div class="bg-slate-800 rounded-t-2xl sm:rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-700" (click)="$event.stopPropagation()">
-                <div class="px-6 py-5 border-b border-slate-700">
-                    <h3 class="text-xl font-medium text-white">設定桌布</h3>
-                </div>
+                <div class="px-6 py-5 border-b border-slate-700"><h3 class="text-xl font-medium text-white">設定桌布</h3></div>
                 <div class="flex flex-col">
-                    <button (click)="applyWallpaper('home')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 group-hover:text-emerald-400"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                        <span class="text-base">主畫面</span>
-                    </button>
-                    <button (click)="applyWallpaper('lock')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 group-hover:text-emerald-400"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        <span class="text-base">螢幕鎖定</span>
-                    </button>
-                    <button (click)="applyWallpaper('both')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 transition-colors text-left group">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 group-hover:text-emerald-400"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M12 18h.01"/></svg>
-                        <span class="text-base">主畫面和螢幕鎖定</span>
-                    </button>
+                    <button (click)="applyWallpaper('home')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 text-left">主畫面</button>
+                    <button (click)="applyWallpaper('lock')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 text-left">螢幕鎖定</button>
+                    <button (click)="applyWallpaper('both')" class="px-6 py-4 flex items-center gap-4 text-slate-200 hover:bg-slate-700/50 text-left">主畫面和螢幕鎖定</button>
                 </div>
             </div>
         </div>
       }
 
       @if (toastMessage()) {
-          <div class="absolute bottom-12 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 bg-slate-800/90 backdrop-blur-md rounded-full border border-slate-600 shadow-2xl animate-slide-up flex items-center gap-2 max-w-[90%] whitespace-nowrap">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            <span class="font-medium text-white text-sm">{{ toastMessage() }}</span>
-          </div>
+          <div class="absolute bottom-12 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 bg-slate-800/90 backdrop-blur-md rounded-full border border-slate-600 shadow-2xl text-sm font-medium text-white">{{ toastMessage() }}</div>
       }
 
     </div>
@@ -238,9 +229,7 @@ type FitMode = 'height' | 'width';
     .w-screen-115 { width: 115vw; height: auto; }
     .h-screen-115 { height: 115vh; width: auto; }
     .animate-fade-in { animation: fadeIn 0.2s ease-out; }
-    .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
   `]
 })
 export class EditorComponent implements OnDestroy, AfterViewInit {
@@ -477,9 +466,7 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const result = reader.result as string;
-        const base64 = result.split(',')[1]; 
-        resolve(base64);
+        resolve((reader.result as string).split(',')[1]);
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
@@ -493,7 +480,6 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
 
     try {
         const effectiveStrength = this.motionEnabled() ? this.motionStrength() : 0;
-
         let base64Data: string;
         const sourcePath = (currentPhoto as any).path || (currentPhoto as any).webPath;
 
@@ -554,42 +540,30 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
 
         this.settingsService.updateSettings(updatePayload);
 
-        if ((window as any).Android) {
-            if ((window as any).Android.setWallpaper) {
-                (window as any).Android.setWallpaper(nativePath);
-                this.toastMessage.set('已發送設定至 Android 系統');
-            }
+        if ((window as any).Android?.setWallpaper) {
+            (window as any).Android.setWallpaper(nativePath);
+            this.toastMessage.set('已發送設定至 Android 系統');
         } else {
            this.toastMessage.set('已儲存 (Bridge Inactive)');
         }
 
-    } catch (e) {
-        // Suppressing catch body logs for pristine runtime execution
-    }
+    } catch (e) {}
 
-    setTimeout(() => {
-        this.toastMessage.set(null);
-    }, 3000);
+    setTimeout(() => this.toastMessage.set(null), 3000);
   }
   
-  // --- POINTER EVENTS (Drag & Pinch) ---
-
   onPointerDown(event: PointerEvent) {
     if (this.isSettingsOpen()) return;
-    
     this.activePointers.push(event);
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
 
     if (this.activePointers.length === 1) {
         this.isDragging = true;
-        this.startX = event.clientX;
-        this.startY = event.clientY;
-        this.initialPanX = this.panX();
-        this.initialPanY = this.panY();
+        this.startX = event.clientX; this.startY = event.clientY;
+        this.initialPanX = this.panX(); this.initialPanY = this.panY();
         this.updateBoundaries();
     } else if (this.activePointers.length === 2) {
-        this.isPinching = true;
-        this.isDragging = false; 
+        this.isPinching = true; this.isDragging = false; 
         this.initialPinchDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
         this.initialScale = this.imageScale();
     }
@@ -597,50 +571,31 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
 
   onPointerMove(event: PointerEvent) {
     const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
-    if (index !== -1) {
-        this.activePointers[index] = event;
-    }
+    if (index !== -1) this.activePointers[index] = event;
 
     if (this.isPinching && this.activePointers.length === 2) {
         const curDist = this.getPinchDistance(this.activePointers[0], this.activePointers[1]);
         if (this.initialPinchDist > 0) {
-            const scaleFactor = curDist / this.initialPinchDist;
-            let newScale = this.initialScale * scaleFactor;
-            newScale = Math.max(1.0, Math.min(newScale, 3.0));
-            this.imageScale.set(newScale);
+            let newScale = this.initialScale * (curDist / this.initialPinchDist);
+            this.imageScale.set(Math.max(1.0, Math.min(newScale, 3.0)));
         }
     } else if (this.isDragging && this.activePointers.length === 1) {
         let newX = this.initialPanX + (event.clientX - this.startX);
         let newY = this.initialPanY + (event.clientY - this.startY);
-        
-        const limX = this.limitX();
-        const limY = this.limitY();
-
-        newX = Math.max(-limX, Math.min(newX, limX));
-        newY = Math.max(-limY, Math.min(newY, limY));
-
-        this.panX.set(newX);
-        this.panY.set(newY);
+        const limX = this.limitX(); const limY = this.limitY();
+        this.panX.set(Math.max(-limX, Math.min(newX, limX)));
+        this.panY.set(Math.max(-limY, Math.min(newY, limY)));
     }
   }
 
   onPointerUp(event: PointerEvent) {
       const index = this.activePointers.findIndex(p => p.pointerId === event.pointerId);
-      if (index !== -1) {
-          this.activePointers.splice(index, 1);
-      }
-      
-      if (this.activePointers.length < 2) {
-          this.isPinching = false;
-      }
-      if (this.activePointers.length === 0) {
-          this.isDragging = false;
-      }
+      if (index !== -1) this.activePointers.splice(index, 1);
+      if (this.activePointers.length < 2) this.isPinching = false;
+      if (this.activePointers.length === 0) this.isDragging = false;
       if (this.activePointers.length === 1) {
-          this.startX = this.activePointers[0].clientX;
-          this.startY = this.activePointers[0].clientY;
-          this.initialPanX = this.panX();
-          this.initialPanY = this.panY();
+          this.startX = this.activePointers[0].clientX; this.startY = this.activePointers[0].clientY;
+          this.initialPanX = this.panX(); this.initialPanY = this.panY();
           this.isDragging = true;
       }
   }
@@ -652,73 +607,44 @@ export class EditorComponent implements OnDestroy, AfterViewInit {
   onWheel(event: WheelEvent) {
       if (this.isSettingsOpen()) return;
       event.preventDefault();
-      
-      const delta = -event.deltaY * 0.001;
-      let newScale = this.imageScale() + delta;
-      newScale = Math.max(1.0, Math.min(newScale, 3.0));
-      this.imageScale.set(newScale);
+      let newScale = this.imageScale() + (-event.deltaY * 0.001);
+      this.imageScale.set(Math.max(1.0, Math.min(newScale, 3.0)));
       this.updateBoundaries();
   }
 
-  endDrag() { 
-      if(this.activePointers.length === 0) this.isDragging = false; 
-  }
+  endDrag() { if(this.activePointers.length === 0) this.isDragging = false; }
 
   async requestMotionPermission() {
     this.motionError.set(null);
     if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
       try {
         const p = await (DeviceOrientationEvent as any).requestPermission();
-        if (p === 'granted') {
-          this.motionEnabled.set(true);
-          this.initMotionListener();
-        } else this.motionError.set('Denied.');
+        if (p === 'granted') { this.motionEnabled.set(true); this.initMotionListener(); } 
+        else this.motionError.set('Denied.');
       } catch (e) { this.motionError.set('Error.'); }
-    } else {
-      this.motionEnabled.set(true);
-      this.initMotionListener();
-    }
+    } else { this.motionEnabled.set(true); this.initMotionListener(); }
   }
 
   toggleMotion() {
     if (this.motionEnabled()) {
-      this.motionEnabled.set(false);
-      this.gyroX.set(0); this.gyroY.set(0);
-      this.removeMotionListener();
+      this.motionEnabled.set(false); this.gyroX.set(0); this.gyroY.set(0); this.removeMotionListener();
     } else this.requestMotionPermission();
   }
 
   private handleOrientation = (event: DeviceOrientationEvent) => {
-    if (!this.motionEnabled()) return;
-
-    if (this.settingsService.isEffectivelyPaused()) {
-        return; 
-    }
-
+    if (!this.motionEnabled() || this.settingsService.isEffectivelyPaused()) return;
     const now = performance.now();
-    const targetFps = this.settingsService.settings().targetFps;
-    const interval = 1000 / targetFps;
-
-    if (now - this.lastFrameTime < interval) return;
+    if (now - this.lastFrameTime < (1000 / this.settingsService.settings().targetFps)) return;
     this.lastFrameTime = now;
 
-    let gamma = event.gamma || 0; 
-    let beta = event.beta || 0;
-    
+    let gamma = event.gamma || 0; let beta = event.beta || 0;
     if (gamma > 45) gamma = 45; if (gamma < -45) gamma = -45;
     if (beta > 45) beta = 45; if (beta < -45) beta = -45;
-
-    const baseRange = 50; 
-    const strength = this.motionStrength();
     
-    this.gyroX.set((gamma / 45) * baseRange * strength);
-    this.gyroY.set((beta / 45) * baseRange * strength);
+    this.gyroX.set((gamma / 45) * 50 * this.motionStrength());
+    this.gyroY.set((beta / 45) * 50 * this.motionStrength());
   };
 
-  initMotionListener() {
-    window.addEventListener('deviceorientation', this.handleOrientation);
-  }
-  removeMotionListener() {
-    window.removeEventListener('deviceorientation', this.handleOrientation);
-  }
+  initMotionListener() { window.addEventListener('deviceorientation', this.handleOrientation); }
+  removeMotionListener() { window.removeEventListener('deviceorientation', this.handleOrientation); }
 }
